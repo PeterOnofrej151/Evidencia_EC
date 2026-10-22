@@ -500,32 +500,6 @@
     'partial': L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-orange.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34] })
   };
 
-  // Databáza súradníc miest v Prešovskom kraji
-  const mestoCoordinates = {
-    'prešov': [48.9984, 21.2393],
-    'poprad': [49.0595, 20.2977],
-    'kežmarok': [49.1353, 20.4283],
-    'humenné': [48.9370, 21.9163],
-    'bardejov': [49.2918, 21.2727],
-    'svidník': [49.3053, 21.5673],
-    'stropkov': [49.2021, 21.6521],
-    'vranov nad topľou': [48.8885, 21.6847],
-    'vranov': [48.8885, 21.6847],
-    'levoča': [49.0218, 20.5894],
-    'stará ľubovňa': [49.3013, 20.6888],
-    'ľubovňa': [49.3013, 20.6888],
-    'snina': [48.9876, 22.1501],
-    'medzilaborce': [49.2708, 21.9056],
-    'sabinov': [49.1025, 21.0981],
-    'giraltovce': [49.1128, 21.5173],
-    'vysoké tatry': [49.1381, 20.2185],
-    'smokovec': [49.1415, 20.2227],
-    'horný smokovec': [49.1415, 20.2227],
-    'batizovce': [49.0761, 20.1818],
-    'ličartovce': [48.8778, 21.2403],
-    'legnava': [49.3361, 20.8358]
-  };
-
   function showToast(msg, type = 'info') {
     let bg = 'var(--primary-color)';
     if (type === 'success') bg = 'var(--accent-color)';
@@ -741,65 +715,45 @@
     return '';
   }
 
-  // Funkcia pre detekciu mesta a súradníc - PRVOORADÁ JE ADRESA, POTOM NÁZOV
-  function detegujMestoAAdresu(orgName = '', poznamkaVal = '', adresaVal = '') {
-    // 1. Prednostne hľadáme v reťazci Adresy
+  // Asynchrónna funkcia pre presné určenie súradníc cez OpenStreetMap Nominatim API na základe adresy
+  async function detegujMestoAAdresu(orgName = '', poznamkaVal = '', adresaVal = '') {
+    let queryToSearch = '';
+
     if (adresaVal && adresaVal.trim() !== '') {
-      const adresaLower = adresaVal.toLowerCase();
-      for (const [mesto, coords] of Object.entries(mestoCoordinates)) {
-        if (adresaLower.includes(mesto)) {
-          // Vytiahneme mesto z reťazca alebo použijeme kľúč s prvým veľkým písmom
-          const mFormatted = mesto.charAt(0).toUpperCase() + mesto.slice(1);
-          return {
-            mesto: adresaVal,
-            coords: [coords[0] + (Math.random() * 0.008 - 0.004), coords[1] + (Math.random() * 0.008 - 0.004)]
-          };
-        }
-      }
-      // Ak má zadanú adresu, ale mesto nespadlo do slovníka, vrátime zadanú adresu s default súradnicami Prešova
-      return {
-        mesto: adresaVal,
-        coords: [mestoCoordinates['prešov'][0] + (Math.random() * 0.01 - 0.005), mestoCoordinates['prešov'][1] + (Math.random() * 0.01 - 0.005)]
-      };
+      queryToSearch = adresaVal;
+    } else {
+      queryToSearch = orgName;
     }
 
-    // 2. Záložný výpočet z názvu organizácie / poznámky (ak nie je vyplnená adresa)
-    const text = (orgName + " " + poznamkaVal).toLowerCase();
-
-    if (orgName.includes(',')) {
-      const casti = orgName.split(',');
-      if (casti.length >= 2) {
-        const poslednaCast = casti[casti.length - 1].trim();
-        if (poslednaCast) {
-          const mKey = poslednaCast.toLowerCase();
-          if (mestoCoordinates[mKey]) {
-            return {
-              mesto: poslednaCast,
-              coords: [mestoCoordinates[mKey][0] + (Math.random() * 0.01 - 0.005), mestoCoordinates[mKey][1] + (Math.random() * 0.01 - 0.005)]
-            };
-          }
-        }
-      }
+    if (queryToSearch && !queryToSearch.toLowerCase().includes('slovensko')) {
+      queryToSearch += ', Prešovský kraj, Slovensko';
     }
 
-    for (const [mesto, coords] of Object.entries(mestoCoordinates)) {
-      if (text.includes(mesto)) {
-        const mFormatted = mesto.charAt(0).toUpperCase() + mesto.slice(1);
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryToSearch)}&limit=1`, {
+        headers: {
+          'User-Agent': 'EvidenciaEC-App/1.0'
+        }
+      });
+      const data = await response.json();
+
+      if (data && data.length > 0) {
         return {
-          mesto: mFormatted,
-          coords: [coords[0] + (Math.random() * 0.01 - 0.005), coords[1] + (Math.random() * 0.01 - 0.005)]
+          mesto: adresaVal || orgName,
+          coords: [parseFloat(data[0].lat), parseFloat(data[0].lon)]
         };
       }
+    } catch (err) {
+      console.warn("Geokódovanie zlyhalo pre:", queryToSearch, err);
     }
 
     return {
-      mesto: 'Prešov',
-      coords: [mestoCoordinates['prešov'][0] + (Math.random() * 0.01 - 0.005), mestoCoordinates['prešov'][1] + (Math.random() * 0.01 - 0.005)]
+      mesto: adresaVal || 'Prešov',
+      coords: [48.9984 + (Math.random() * 0.005 - 0.0025), 21.2393 + (Math.random() * 0.005 - 0.0025)]
     };
   }
 
   function aktualizujUI() {
-    // Vyčistenie mapových markerov
     Object.values(markerMap).forEach(m => mapa.removeLayer(m));
     markerMap = {};
 
@@ -811,7 +765,6 @@
     zobrazovane.forEach((l, idx) => {
       const statusKey = getStatusKey(l);
       
-      // Vytvorenie Leaflet Markera
       const marker = L.marker([l.lat, l.lng], { icon: markerIcons[statusKey] }).addTo(mapa);
       
       let pdfHtml = '';
@@ -837,7 +790,6 @@
       marker.bindPopup(popupContent);
       markerMap[l.id || idx] = marker;
 
-      // Vytvorenie položky v zozname (sidebar)
       const item = document.createElement('div');
       item.className = 'lokalita';
       
@@ -910,7 +862,7 @@
   }
 
   function clearAllData() {
-    if (confirm('POZOR: Naozaj chcete vymazať VŠETKY dátové záznamy? Tátová akcia je nevratná.')) {
+    if (confirm('POZOR: Naozaj chcete vymazať VŠETKY dátové záznamy? Táto akcia je nevratná.')) {
       lokality = [];
       localStorage.removeItem('ec_budovy_data');
       aktualizujUI();
@@ -923,7 +875,7 @@
     try {
       localStorage.setItem('ec_budovy_data', JSON.stringify(lokality));
     } catch (e) {
-      showToast('Kapacita lokálneho úložiska bola prekročená! Odporúčame stiahnuť JSON zálohu.', 'error');
+      showToast('Kapacita lokálneho úložiska bola prekročená!', 'error');
     }
   }
 
@@ -936,7 +888,6 @@
     showToast('Záloha bola stiahnutá.', 'success');
   }
 
-  // Spracovanie formulára pre Pridanie/Editáciu
   document.getElementById('editForm').onsubmit = function(e) {
     e.preventDefault();
     const index = parseInt(document.getElementById('editIndex').value);
@@ -983,7 +934,6 @@
     document.getElementById('editModal').style.display = 'none';
   };
 
-  // Načítanie z Google Tabuľky (CSV)
   async function importujZGoogleTabulky() {
     const url = document.getElementById('googleSheetUrlInput').value.trim();
     if (!url) {
@@ -992,7 +942,7 @@
     }
 
     try {
-      showToast('Načítavam dáta z Google Tabuľky...', 'info');
+      showToast('Načítavam a geokódujem dáta z Google Tabuľky...', 'info');
       const resp = await fetch(url);
       const csvText = await resp.text();
       
@@ -1006,28 +956,27 @@
       }
 
       let noveLokality = [];
-      rows.forEach(r => {
-        const orgName = getRowVal(r, ['Názov organizácie (OvZP PSK)', 'Názov organizácie', 'Organizácia', 'Názov', 'Name']);
-        if (!orgName) return;
+      for (const r of rows) {
+        const orgName = getRowVal(r, ['2. Názov organizácie (OvZP PSK)  ', 'Názov organizácie (OvZP PSK)', 'Názov organizácie', 'Organizácia', 'Názov', 'Name']);
+        if (!orgName) continue;
 
-        const adresaVal = getRowVal(r, ['Adresa organizácie / Mesto', 'Adresa organizácie', 'Adresa', 'Mesto', 'Polis', 'Sídlo']);
-        const poznamkaVal = getRowVal(r, ['Poznámka', 'Poznamka', 'Poznámky', 'Špecifické informácie']);
+        const adresaVal = getRowVal(r, ['Adresa', 'Adresa organizácie / Mesto', 'Adresa organizácie', 'Mesto', 'Polis', 'Sídlo']);
+        const poznamkaVal = getRowVal(r, ['Poznámka alebo špecifické informácie ', 'Poznámka', 'Poznamka', 'Poznámky']);
 
-        // Tu sa poloha určuje prioritne z adresy
-        const detekcia = detegujMestoAAdresu(orgName, poznamkaVal, adresaVal);
+        const detekcia = await detegujMestoAAdresu(orgName, poznamkaVal, adresaVal);
 
-        const maEC = parseInt(getRowVal(r, ['Počet budov S platným EC', 'S platným EC', 'Ma EC'])) || 0;
-        const nemaEC = parseInt(getRowVal(r, ['Počet budov BEZ platného EC', 'BEZ platného EC', 'Nema EC'])) || 0;
-        const celkovo = parseInt(getRowVal(r, ['Celkový počet budov v správe', 'Počet budov', 'Celkovo'])) || (maEC + nemaEC) || 1;
+        const maEC = parseInt(getRowVal(r, ['Počet budov, ktoré MÁJÚ platný energetický certifikát: [ Zadať číslo ]', 'Počet budov S platným EC', 'S platným EC', 'Ma EC'])) || 0;
+        const nemaEC = parseInt(getRowVal(r, ['Počet budov, ktoré NEMÁJÚ platný energetický certifikát: [ Zadať číslo ]', 'Počet budov BEZ platného EC', 'BEZ platného EC', 'Nema EC'])) || 0;
+        const celkovo = parseInt(getRowVal(r, ['Celkový počet budov vo vašej správe (ktoré spadają pod zákonnú povinnosť):  ', 'Celkový počet budov v správe', 'Počet budov', 'Celkovo'])) || (maEC + nemaEC) || 1;
 
         noveLokality.push({
           id: 'gs_' + Math.random().toString(36).substr(2, 9),
           name: orgName,
-          sektor: getRowVal(r, ['Sektor', 'Oblasť']) || 'Správa',
+          sektor: getRowVal(r, ['3. Sektor ', 'Sektor', 'Oblasť']) || 'Správa',
           polis: adresaVal || detekcia.mesto,
-          kontaktna_osoba: getRowVal(r, ['Kontaktná osoba', 'Osoba', 'Meno']),
-          email: getRowVal(r, ['E-mailová adresa', 'Email', 'E-mail']),
-          telefon: getRowVal(r, ['Telefonický kontakt', 'Telefon', 'Telefón', 'Tel']),
+          kontaktna_osoba: getRowVal(r, ['4. Meno a priezvisko kontaktnej osoby  ', 'Kontaktná osoba', 'Osoba', 'Meno']),
+          email: getRowVal(r, ['5. E-mailová adresa  ', 'E-mailová adresa', 'Email', 'E-mail']),
+          telefon: getRowVal(r, ['6. Telefonický kontakt  ', 'Telefonický kontakt', 'Telefon', 'Telefón', 'Tel']),
           cislo_ec: getRowVal(r, ['Číslo EC', 'Cislo EC', 'EC']),
           pocet_budov: celkovo,
           pocet_ec_ma: maEC,
@@ -1037,31 +986,30 @@
           poznamka: poznamkaVal,
           pdf_zoznam: []
         });
-      });
+      }
 
       if (noveLokality.length > 0) {
         lokality = noveLokality;
         ulozDoLocalStorage();
         aktualizujUI();
         document.getElementById('dataModal').style.display = 'none';
-        showToast(`Úspešne načítaných ${noveLokality.length} záznamov z Google Tabuľky!`, 'success');
+        showToast(`Úspešne načítaných a zgeokódovaných ${noveLokality.length} záznamov!`, 'success');
       } else {
         showToast('Nenašli sa žiadne platné záznamy v tabuľke.', 'error');
       }
 
     } catch (err) {
       console.error(err);
-      showToast('Chyba pri načítavaní Google Tabuľky. Skontrolujte pripojenie a URL.', 'error');
+      showToast('Chyba pri načítavaní Google Tabuľky.', 'error');
     }
   }
 
-  // Import z Excelu / CSV súboru z PC
   document.getElementById('fileInput').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = function(evt) {
+    reader.onload = async function(evt) {
       try {
         const data = evt.target.result;
         const workbook = XLSX.read(data, { type: 'binary' });
@@ -1069,29 +1017,28 @@
         const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
         let importovane = [];
-        rows.forEach(r => {
-          const orgName = getRowVal(r, ['Názov organizácie (OvZP PSK)', 'Názov organizácie', 'Organizácia', 'Názov']);
-          if (!orgName) return;
+        for (const r of rows) {
+          const orgName = getRowVal(r, ['2. Názov organizácie (OvZP PSK)  ', 'Názov organizácie (OvZP PSK)', 'Názov organizácie', 'Organizácia', 'Názov']);
+          if (!orgName) continue;
 
-          const adresaVal = getRowVal(r, ['Adresa organizácie / Mesto', 'Adresa organizácie', 'Adresa', 'Mesto', 'Polis']);
-          const poznamkaVal = getRowVal(r, ['Poznámka', 'Poznamka']);
+          const adresaVal = getRowVal(r, ['Adresa', 'Adresa organizácie / Mesto', 'Adresa organizácie', 'Mesto', 'Polis']);
+          const poznamkaVal = getRowVal(r, ['Poznámka alebo špecifické informácie ', 'Poznámka', 'Poznamka']);
 
-          // Určenie polohy s prioritou z adresy
-          const detekcia = detegujMestoAAdresu(orgName, poznamkaVal, adresaVal);
+          const detekcia = await detegujMestoAAdresu(orgName, poznamkaVal, adresaVal);
 
-          const maEC = parseInt(getRowVal(r, ['Počet budov S platným EC', 'Ma EC'])) || 0;
-          const nemaEC = parseInt(getRowVal(r, ['Počet budov BEZ platného EC', 'Nema EC'])) || 0;
+          const maEC = parseInt(getRowVal(r, ['Počet budov, ktoré MÁJÚ platný energetický certifikát: [ Zadať číslo ]', 'Počet budov S platným EC', 'Ma EC'])) || 0;
+          const nemaEC = parseInt(getRowVal(r, ['Počet budov, ktoré NEMÁJÚ platný energetický certifikát: [ Zadať číslo ]', 'Počet budov BEZ platného EC', 'Nema EC'])) || 0;
 
           importovane.push({
             id: 'imp_' + Math.random().toString(36).substr(2, 9),
             name: orgName,
-            sektor: getRowVal(r, ['Sektor']) || 'Správa',
+            sektor: getRowVal(r, ['3. Sektor ', 'Sektor']) || 'Správa',
             polis: adresaVal || detekcia.mesto,
-            kontaktna_osoba: getRowVal(r, ['Kontaktná osoba', 'Osoba']),
-            email: getRowVal(r, ['E-mailová adresa', 'Email']),
-            telefon: getRowVal(r, ['Telefonický kontakt', 'Telefon']),
+            kontaktna_osoba: getRowVal(r, ['4. Meno a priezvisko kontaktnej osoby  ', 'Kontaktná osoba', 'Osoba']),
+            email: getRowVal(r, ['5. E-mailová adresa  ', 'E-mailová adresa', 'Email']),
+            telefon: getRowVal(r, ['6. Telefonický kontakt  ', 'Telefonický kontakt', 'Telefon']),
             cislo_ec: getRowVal(r, ['Číslo EC', 'EC']),
-            pocet_budov: parseInt(getRowVal(r, ['Celkový počet budov v správe'])) || (maEC + nemaEC) || 1,
+            pocet_budov: parseInt(getRowVal(r, ['Celkový počet budov vo vašej správe (ktoré spadają pod zákonnú povinnosť):  ', 'Celkový počet budov v správe'])) || (maEC + nemaEC) || 1,
             pocet_ec_ma: maEC,
             pocet_ec_nema: nemaEC,
             lat: parseFloat(getRowVal(r, ['Lat', 'Šírka'])) || detekcia.coords[0],
@@ -1099,14 +1046,14 @@
             poznamka: poznamkaVal,
             pdf_zoznam: []
           });
-        });
+        }
 
         if (importovane.length > 0) {
           lokality = importovane;
           ulozDoLocalStorage();
           aktualizujUI();
           document.getElementById('dataModal').style.display = 'none';
-          showToast(`Importovaných ${importovane.length} záznamov.`, 'success');
+          showToast(`Importovaných a zgeokódovaných ${importovane.length} záznamov.`, 'success');
         }
       } catch (err) {
         showToast('Chyba pri spracovaní súboru!', 'error');
@@ -1115,7 +1062,6 @@
     reader.readAsBinaryString(file);
   });
 
-  // Export do Excelu
   document.getElementById('exportBtn').onclick = function() {
     if (lokality.length === 0) {
       showToast('Žiadne dáta na export.', 'error');
@@ -1125,7 +1071,7 @@
     const exportRows = lokality.map(l => ({
       'Názov organizácie (OvZP PSK)': l.name,
       'Sektor': l.sektor,
-      'Adresa organizácie / Mesto': l.polis,
+      'Adresa': l.polis,
       'Kontaktná osoba': l.kontaktna_osoba,
       'E-mailová adresa': l.email,
       'Telefonický kontakt': l.telefon,
@@ -1145,7 +1091,6 @@
     showToast('Export do Excelu prebehol úspešne.', 'success');
   };
 
-  // Načítanie JSON databázy (Nahradenie / Pripojenie)
   document.getElementById('jsonReplaceInput').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -1188,21 +1133,18 @@
     reader.readAsText(file);
   });
 
-  // Event Listenery pre filtre
   document.getElementById('searchFilter').addEventListener('input', aktualizujUI);
   document.getElementById('filterSektor').addEventListener('change', aktualizujUI);
   document.getElementById('filterStatus').addEventListener('change', aktualizujUI);
   document.getElementById('filterMesto').addEventListener('change', aktualizujUI);
   document.getElementById('filterMinBudov').addEventListener('input', aktualizujUI);
 
-  // Zavretie modulov
   document.getElementById('closeEditModal').onclick = () => document.getElementById('editModal').style.display = 'none';
   window.onclick = function(event) {
     if (event.target == document.getElementById('editModal')) document.getElementById('editModal').style.display = 'none';
     if (event.target == document.getElementById('dataModal')) document.getElementById('dataModal').style.display = 'none';
   };
 
-  // Prepínanie bočného panela
   const toggleBtn = document.getElementById('toggleSidebar');
   const sidebar = document.getElementById('sidebar');
   toggleBtn.onclick = function() {
@@ -1213,7 +1155,6 @@
     setTimeout(() => mapa.invalidateSize(), 300);
   };
 
-  // Prepínanie základnej mapy
   const basemapSwitcherHeader = document.querySelector('.basemap-switcher-header');
   const basemapOptions = document.querySelector('.basemap-options');
   basemapSwitcherHeader.onclick = () => {
@@ -1232,7 +1173,6 @@
     });
   });
 
-  // Inicializácia pri načítaní stránky
   window.onload = function() {
     const saved = localStorage.getItem('ec_budovy_data');
     if (saved) {
@@ -1243,7 +1183,6 @@
       }
     }
     
-    // Ak sú dáta prázdne, automaticky ich načítame z Google Tabuľky
     if (lokality.length === 0) {
       importujZGoogleTabulky();
     } else {
