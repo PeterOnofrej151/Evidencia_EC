@@ -331,21 +331,22 @@
     <span class="close-button" onclick="document.getElementById('dataModal').style.display='none'">&times;</span>
     <h2 style="color:var(--primary-color); margin-top:0;"><i class="fas fa-database"></i> Dátové operácie</h2>
     
-    <!-- Správa databázy cez JSON (100% stabilné) -->
+    <!-- Správa databázy cez JSON -->
     <div style="margin-bottom: 15px; background: #e8f4fd; border: 1px solid #b8daff; padding: 15px; border-radius: 6px;">
-      <h4 style="margin-top:0; color:var(--primary-color);"><i class="fas fa-server"></i> Správa databázy (JSON súbor)</h4>
+      <h4 style="margin-top:0; color:var(--primary-color);"><i class="fas fa-server"></i> Správa databázy (JSON záloha)</h4>
       <p style="font-size: 13px; color: var(--light-text-color); margin-bottom: 10px;">Nahrajte pripravený JSON súbor s dátami alebo si stiahnite aktuálnu zálohu.</p>
       <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-        <label class="btn" style="margin:0; cursor:pointer;"><i class="fas fa-file-upload"></i> Nahradiť celú databázu <input type="file" id="jsonReplaceInput" accept=".json" style="display:none;" /></label>
+        <label class="btn" style="margin:0; cursor:pointer;"><i class="fas fa-file-upload"></i> Nahradiť databázu (JSON) <input type="file" id="jsonReplaceInput" accept=".json" style="display:none;" /></label>
         <button onclick="ulozLokality()" class="btn btn-secondary" style="margin:0;"><i class="fas fa-download"></i> Stiahnuť JSON zálohu</button>
       </div>
     </div>
 
-    <!-- Excel záloha -->
-    <div style="margin-bottom: 15px;">
-      <h4><i class="fas fa-file-excel" style="color:#217346;"></i> Excel Export / Import</h4>
-      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
-        <label class="btn btn-success" style="margin:0; cursor:pointer;"><i class="fas fa-file-import"></i> Import z Excelu (.xlsx) <input type="file" id="fileInput" accept=".xlsx, .csv" style="display:none;" /></label>
+    <!-- Excel Import / Export -->
+    <div style="margin-bottom: 15px; background: #f1f8e9; border: 1px solid #c5e1a5; padding: 15px; border-radius: 6px;">
+      <h4 style="margin-top:0; color:#2e7d32;"><i class="fas fa-file-excel" style="color:#217346;"></i> Excel Import / Export (.xlsx, .csv)</h4>
+      <p style="font-size: 13px; color: var(--light-text-color); margin-bottom: 10px;">Nahrajte priamo excelovskú tabuľku s dátami organizácií.</p>
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <label class="btn btn-success" style="margin:0; cursor:pointer;"><i class="fas fa-file-import"></i> Import z Excelu <input type="file" id="fileInput" accept=".xlsx, .csv" style="display:none;" /></label>
         <button id="exportBtn" class="btn btn-secondary" style="margin:0;"><i class="fas fa-file-export"></i> Export do Excelu</button>
       </div>
     </div>
@@ -906,7 +907,7 @@
     reader.readAsText(file);
   });
 
-  // Alternatívny import z Excelu (.xlsx) pre prípad potreby
+  // Opravený a stabilizovaný import z Excelu (.xlsx / .csv) pomocou ArrayBuffer
   document.getElementById('fileInput').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -914,39 +915,44 @@
     const reader = new FileReader();
     reader.onload = async function(evt) {
       try {
-        const data = evt.target.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
+        const data = new Uint8Array(evt.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
         const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
+
+        if (!rows || rows.length === 0) {
+          showToast('Excel súbor neobsahuje žiadne dáta.', 'error');
+          return;
+        }
 
         let importovane = [];
         for (const r of rows) {
           const keys = Object.keys(r);
-          let orgName = getRowVal(r, ['2. Názov organizácie (OvZP PSK)', 'Názov organizácie', 'Organizácia', 'Názov']);
+          let orgName = getRowVal(r, ['2. Názov organizácie (OvZP PSK)', 'Názov organizácie', 'Organizácia', 'Názov', 'Name']);
           if (!orgName && keys.length > 1) orgName = r[keys[1]];
           if (!orgName) continue;
 
-          let adresaVal = getRowVal(r, ['Adresa', 'Adresa organizácie / Mesto', 'Adresa organizácie', 'Mesto', 'Polis']);
+          let adresaVal = getRowVal(r, ['Adresa', 'Adresa organizácie / Mesto', 'Adresa organizácie', 'Mesto', 'Polis', 'Sídlo']);
           if (!adresaVal && keys.length > 3) adresaVal = r[keys[3]];
 
-          const poznamkaVal = getRowVal(r, ['Poznámka alebo špecifické informácie', 'Poznámka', 'Poznamka']);
+          const poznamkaVal = getRowVal(r, ['Poznámka alebo špecifické informácie', 'Poznámka', 'Poznamka', 'Poznámky']);
 
           const detekcia = await detegujMestoAAdresu(orgName, poznamkaVal, adresaVal);
           await delay(350);
 
-          const maEC = parseInt(getRowVal(r, ['Počet budov, ktoré MÁJÚ platný energetický certifikát: [ Zadať číslo ]', 'Počet budov S platným EC', 'Ma EC'])) || 0;
-          const nemaEC = parseInt(getRowVal(r, ['Počet budov, ktoré NEMÁJÚ platný energetický certifikát: [ Zadať číslo ]', 'Počet budov BEZ platného EC', 'Nema EC'])) || 0;
+          const maEC = parseInt(getRowVal(r, ['Počet budov, ktoré MÁJÚ platný energetický certifikát: [ Zadať číslo ]', 'Počet budov S platným EC', 'S platným EC', 'Ma EC'])) || 0;
+          const nemaEC = parseInt(getRowVal(r, ['Počet budov, ktoré NEMÁJÚ platný energetický certifikát: [ Zadať číslo ]', 'Počet budov BEZ platného EC', 'BEZ platného EC', 'Nema EC'])) || 0;
 
           importovane.push({
             id: 'imp_' + Math.random().toString(36).substr(2, 9),
             name: orgName,
-            sektor: getRowVal(r, ['3. Sektor', 'Sektor']) || 'Správa',
+            sektor: getRowVal(r, ['3. Sektor', 'Sektor', 'Oblasť']) || 'Správa',
             polis: adresaVal || detekcia.mesto,
-            kontaktna_osoba: getRowVal(r, ['4. Meno a priezvisko kontaktnej osoby', 'Kontaktná osoba', 'Osoba']),
-            email: getRowVal(r, ['5. E-mailová adresa', 'E-mailová adresa', 'Email']),
-            telefon: getRowVal(r, ['6. Telefonický kontakt', 'Telefonický kontakt', 'Telefon']),
-            cislo_ec: getRowVal(r, ['Číslo EC', 'EC']),
-            pocet_budov: parseInt(getRowVal(r, ['Celkový počet budov vo vašej správe (ktoré spadajú pod zákonnú povinnosť):', 'Celkový počet budov v správe'])) || (maEC + nemaEC) || 1,
+            kontaktna_osoba: getRowVal(r, ['4. Meno a priezvisko kontaktnej osoby', 'Kontaktná osoba', 'Osoba', 'Meno']),
+            email: getRowVal(r, ['5. E-mailová adresa', 'E-mailová adresa', 'Email', 'E-mail']),
+            telefon: getRowVal(r, ['6. Telefonický kontakt', 'Telefonický kontakt', 'Telefon', 'Telefón', 'Tel']),
+            cislo_ec: getRowVal(r, ['Číslo EC', 'Cislo EC', 'EC']),
+            pocet_budov: parseInt(getRowVal(r, ['Celkový počet budov vo vašej správe (ktoré spadajú pod zákonnú povinnosť):', 'Celkový počet budov v správe', 'Počet budov', 'Celkovo'])) || (maEC + nemaEC) || 1,
             pocet_ec_ma: maEC,
             pocet_ec_nema: nemaEC,
             lat: parseFloat(getRowVal(r, ['Lat', 'Šírka'])) || detekcia.coords[0],
@@ -962,12 +968,15 @@
           aktualizujUI();
           document.getElementById('dataModal').style.display = 'none';
           showToast(`Úspešne importovaných ${importovane.length} záznamov.`, 'success');
+        } else {
+          showToast('Nenašli sa žiadne platné riadky v súbore.', 'error');
         }
       } catch (err) {
-        showToast('Chyba pri spracovaní Excel súboru!', 'error');
+        console.error(err);
+        showToast('Chyba pri spracovaní súboru!', 'error');
       }
     };
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
   });
 
   document.getElementById('exportBtn').onclick = function() {
