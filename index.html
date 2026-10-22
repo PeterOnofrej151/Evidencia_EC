@@ -707,7 +707,7 @@
   function getRowVal(row, possibleKeys) {
     const keys = Object.keys(row);
     for (const pk of possibleKeys) {
-      const foundKey = keys.find(k => k.trim().toLowerCase() === pk.toLowerCase());
+      const foundKey = keys.find(k => k.trim().toLowerCase() === pk.trim().toLowerCase());
       if (foundKey !== undefined && row[foundKey] !== undefined && row[foundKey] !== null) {
         return row[foundKey];
       }
@@ -715,7 +715,9 @@
     return '';
   }
 
-  // Asynchrónna funkcia pre presné určenie súradníc cez OpenStreetMap Nominatim API na základe adresy
+  const delay = ms => new Promise(res => setTimeout(res, ms));
+
+  // Asynchrónne geokódovanie adresy cez Nominatim API s ošetrením
   async function detegujMestoAAdresu(orgName = '', poznamkaVal = '', adresaVal = '') {
     let queryToSearch = '';
 
@@ -744,7 +746,7 @@
         };
       }
     } catch (err) {
-      console.warn("Geokódovanie zlyhalo pre:", queryToSearch, err);
+      console.warn("Geokódovanie zlyhalo pre:", queryToSearch);
     }
 
     return {
@@ -935,15 +937,18 @@
   };
 
   async function importujZGoogleTabulky() {
-    const url = document.getElementById('googleSheetUrlInput').value.trim();
-    if (!url) {
+    const rawUrl = document.getElementById('googleSheetUrlInput').value.trim();
+    if (!rawUrl) {
       showToast('Zadajte platnú CSV URL Google Tabuľky!', 'error');
       return;
     }
 
     try {
       showToast('Načítavam a geokódujem dáta z Google Tabuľky...', 'info');
-      const resp = await fetch(url);
+      
+      // Použitie CORS proxy, aby prehliadač nezablokoval požiadavku
+      const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(rawUrl);
+      const resp = await fetch(proxyUrl);
       const csvText = await resp.text();
       
       const workbook = XLSX.read(csvText, { type: 'string' });
@@ -957,26 +962,41 @@
 
       let noveLokality = [];
       for (const r of rows) {
-        const orgName = getRowVal(r, ['2. Názov organizácie (OvZP PSK)  ', 'Názov organizácie (OvZP PSK)', 'Názov organizácie', 'Organizácia', 'Názov', 'Name']);
+        // Flexibilné vyhľadanie názvu organizácie
+        let orgName = getRowVal(r, [
+          '2. Názov organizácie (OvZP PSK)', 
+          'Názov organizácie (OvZP PSK)', 
+          'Názov organizácie', 
+          'Organizácia', 
+          'Názov', 
+          'Name'
+        ]);
+
+        if (!orgName) {
+          const keys = Object.keys(r);
+          if (keys.length > 1) orgName = r[keys[1]] || r[keys[0]];
+        }
         if (!orgName) continue;
 
         const adresaVal = getRowVal(r, ['Adresa', 'Adresa organizácie / Mesto', 'Adresa organizácie', 'Mesto', 'Polis', 'Sídlo']);
-        const poznamkaVal = getRowVal(r, ['Poznámka alebo špecifické informácie ', 'Poznámka', 'Poznamka', 'Poznámky']);
+        const poznamkaVal = getRowVal(r, ['Poznámka alebo špecifické informácie', 'Poznámka', 'Poznamka', 'Poznámky']);
 
+        // Volanie geokódovania s malou pauzou (aby nedošlo k zablokovaniu API)
         const detekcia = await detegujMestoAAdresu(orgName, poznamkaVal, adresaVal);
+        await delay(350); 
 
         const maEC = parseInt(getRowVal(r, ['Počet budov, ktoré MÁJÚ platný energetický certifikát: [ Zadať číslo ]', 'Počet budov S platným EC', 'S platným EC', 'Ma EC'])) || 0;
         const nemaEC = parseInt(getRowVal(r, ['Počet budov, ktoré NEMÁJÚ platný energetický certifikát: [ Zadať číslo ]', 'Počet budov BEZ platného EC', 'BEZ platného EC', 'Nema EC'])) || 0;
-        const celkovo = parseInt(getRowVal(r, ['Celkový počet budov vo vašej správe (ktoré spadają pod zákonnú povinnosť):  ', 'Celkový počet budov v správe', 'Počet budov', 'Celkovo'])) || (maEC + nemaEC) || 1;
+        const celkovo = parseInt(getRowVal(r, ['Celkový počet budov vo vašej správe (ktoré spadajú pod zákonnú povinnosť):', 'Celkový počet budov v správe', 'Počet budov', 'Celkovo'])) || (maEC + nemaEC) || 1;
 
         noveLokality.push({
           id: 'gs_' + Math.random().toString(36).substr(2, 9),
           name: orgName,
-          sektor: getRowVal(r, ['3. Sektor ', 'Sektor', 'Oblasť']) || 'Správa',
+          sektor: getRowVal(r, ['3. Sektor', 'Sektor', 'Oblasť']) || 'Správa',
           polis: adresaVal || detekcia.mesto,
-          kontaktna_osoba: getRowVal(r, ['4. Meno a priezvisko kontaktnej osoby  ', 'Kontaktná osoba', 'Osoba', 'Meno']),
-          email: getRowVal(r, ['5. E-mailová adresa  ', 'E-mailová adresa', 'Email', 'E-mail']),
-          telefon: getRowVal(r, ['6. Telefonický kontakt  ', 'Telefonický kontakt', 'Telefon', 'Telefón', 'Tel']),
+          kontaktna_osoba: getRowVal(r, ['4. Meno a priezvisko kontaktnej osoby', 'Kontaktná osoba', 'Osoba', 'Meno']),
+          email: getRowVal(r, ['5. E-mailová adresa', 'E-mailová adresa', 'Email', 'E-mail']),
+          telefon: getRowVal(r, ['6. Telefonický kontakt', 'Telefonický kontakt', 'Telefon', 'Telefón', 'Tel']),
           cislo_ec: getRowVal(r, ['Číslo EC', 'Cislo EC', 'EC']),
           pocet_budov: celkovo,
           pocet_ec_ma: maEC,
@@ -1018,13 +1038,14 @@
 
         let importovane = [];
         for (const r of rows) {
-          const orgName = getRowVal(r, ['2. Názov organizácie (OvZP PSK)  ', 'Názov organizácie (OvZP PSK)', 'Názov organizácie', 'Organizácia', 'Názov']);
+          const orgName = getRowVal(r, ['2. Názov organizácie (OvZP PSK)', 'Názov organizácie', 'Organizácia', 'Názov']);
           if (!orgName) continue;
 
           const adresaVal = getRowVal(r, ['Adresa', 'Adresa organizácie / Mesto', 'Adresa organizácie', 'Mesto', 'Polis']);
-          const poznamkaVal = getRowVal(r, ['Poznámka alebo špecifické informácie ', 'Poznámka', 'Poznamka']);
+          const poznamkaVal = getRowVal(r, ['Poznámka alebo špecifické informácie', 'Poznámka', 'Poznamka']);
 
           const detekcia = await detegujMestoAAdresu(orgName, poznamkaVal, adresaVal);
+          await delay(350);
 
           const maEC = parseInt(getRowVal(r, ['Počet budov, ktoré MÁJÚ platný energetický certifikát: [ Zadať číslo ]', 'Počet budov S platným EC', 'Ma EC'])) || 0;
           const nemaEC = parseInt(getRowVal(r, ['Počet budov, ktoré NEMÁJÚ platný energetický certifikát: [ Zadať číslo ]', 'Počet budov BEZ platného EC', 'Nema EC'])) || 0;
@@ -1032,13 +1053,13 @@
           importovane.push({
             id: 'imp_' + Math.random().toString(36).substr(2, 9),
             name: orgName,
-            sektor: getRowVal(r, ['3. Sektor ', 'Sektor']) || 'Správa',
+            sektor: getRowVal(r, ['3. Sektor', 'Sektor']) || 'Správa',
             polis: adresaVal || detekcia.mesto,
-            kontaktna_osoba: getRowVal(r, ['4. Meno a priezvisko kontaktnej osoby  ', 'Kontaktná osoba', 'Osoba']),
-            email: getRowVal(r, ['5. E-mailová adresa  ', 'E-mailová adresa', 'Email']),
-            telefon: getRowVal(r, ['6. Telefonický kontakt  ', 'Telefonický kontakt', 'Telefon']),
+            kontaktna_osoba: getRowVal(r, ['4. Meno a priezvisko kontaktnej osoby', 'Kontaktná osoba', 'Osoba']),
+            email: getRowVal(r, ['5. E-mailová adresa', 'E-mailová adresa', 'Email']),
+            telefon: getRowVal(r, ['6. Telefonický kontakt', 'Telefonický kontakt', 'Telefon']),
             cislo_ec: getRowVal(r, ['Číslo EC', 'EC']),
-            pocet_budov: parseInt(getRowVal(r, ['Celkový počet budov vo vašej správe (ktoré spadają pod zákonnú povinnosť):  ', 'Celkový počet budov v správe'])) || (maEC + nemaEC) || 1,
+            pocet_budov: parseInt(getRowVal(r, ['Celkový počet budov vo vašej správe (ktoré spadajú pod zákonnú povinnosť):', 'Celkový počet budov v správe'])) || (maEC + nemaEC) || 1,
             pocet_ec_ma: maEC,
             pocet_ec_nema: nemaEC,
             lat: parseFloat(getRowVal(r, ['Lat', 'Šírka'])) || detekcia.coords[0],
