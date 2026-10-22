@@ -741,10 +741,31 @@
     return '';
   }
 
-  // Funkcia pre inteligentnú detekciu mesta a súradníc z názvu organizácie
-  function detegujMestoAAdresu(orgName, poznamkaVal) {
+  // Funkcia pre detekciu mesta a súradníc - PRVOORADÁ JE ADRESA, POTOM NÁZOV
+  function detegujMestoAAdresu(orgName = '', poznamkaVal = '', adresaVal = '') {
+    // 1. Prednostne hľadáme v reťazci Adresy
+    if (adresaVal && adresaVal.trim() !== '') {
+      const adresaLower = adresaVal.toLowerCase();
+      for (const [mesto, coords] of Object.entries(mestoCoordinates)) {
+        if (adresaLower.includes(mesto)) {
+          // Vytiahneme mesto z reťazca alebo použijeme kľúč s prvým veľkým písmom
+          const mFormatted = mesto.charAt(0).toUpperCase() + mesto.slice(1);
+          return {
+            mesto: adresaVal,
+            coords: [coords[0] + (Math.random() * 0.008 - 0.004), coords[1] + (Math.random() * 0.008 - 0.004)]
+          };
+        }
+      }
+      // Ak má zadanú adresu, ale mesto nespadlo do slovníka, vrátime zadanú adresu s default súradnicami Prešova
+      return {
+        mesto: adresaVal,
+        coords: [mestoCoordinates['prešov'][0] + (Math.random() * 0.01 - 0.005), mestoCoordinates['prešov'][1] + (Math.random() * 0.01 - 0.005)]
+      };
+    }
+
+    // 2. Záložný výpočet z názvu organizácie / poznámky (ak nie je vyplnená adresa)
     const text = (orgName + " " + poznamkaVal).toLowerCase();
-    
+
     if (orgName.includes(',')) {
       const casti = orgName.split(',');
       if (casti.length >= 2) {
@@ -761,11 +782,11 @@
       }
     }
 
-    for (const [mestoKey, coords] of Object.entries(mestoCoordinates)) {
-      if (text.includes(mestoKey)) {
-        const velkymiMesto = mestoKey.charAt(0).toUpperCase() + mestoKey.slice(1);
+    for (const [mesto, coords] of Object.entries(mestoCoordinates)) {
+      if (text.includes(mesto)) {
+        const mFormatted = mesto.charAt(0).toUpperCase() + mesto.slice(1);
         return {
-          mesto: velkymiMesto,
+          mesto: mFormatted,
           coords: [coords[0] + (Math.random() * 0.01 - 0.005), coords[1] + (Math.random() * 0.01 - 0.005)]
         };
       }
@@ -773,259 +794,85 @@
 
     return {
       mesto: 'Prešov',
-      coords: [48.9984 + (Math.random() * 0.04 - 0.02), 21.2393 + (Math.random() * 0.04 - 0.02)]
+      coords: [mestoCoordinates['prešov'][0] + (Math.random() * 0.01 - 0.005), mestoCoordinates['prešov'][1] + (Math.random() * 0.01 - 0.005)]
     };
   }
 
-  // Funkcia na zlúčenie duplicitných záznamov podľa názvu organizácie
-  function zlúcDuplicity(zaznamy) {
-    const mapaZaznamov = new Map();
-
-    zaznamy.forEach(z => {
-      // Normalizácia názvu pre spoľahlivé porovnanie dufíc (malé písmená, bez zbytočných medzier)
-      const kluc = z.name.trim().toLowerCase();
-
-      if (mapaZaznamov.has(kluc)) {
-        const existujuci = mapaZaznamov.get(kluc);
-        // Zlúčenie hodnôt
-        existujuci.pocet_budov = (existujuci.pocet_budov || 0) + (z.pocet_budov || 0);
-        existujuci.pocet_ec_ma = (existujuci.pocet_ec_ma || 0) + (z.pocet_ec_ma || 0);
-        existujuci.pocet_ec_nema = (existujuci.pocet_ec_nema || 0) + (z.pocet_ec_nema || 0);
-        
-        if (z.cislo_ec && !existujuci.cislo_ec.includes(z.cislo_ec)) {
-          existujuci.cislo_ec = existujuci.cislo_ec ? `${existujuci.cislo_ec}, ${z.cislo_ec}` : z.cislo_ec;
-        }
-        if (z.poznamka && !existujuci.poznamka.includes(z.poznamka)) {
-          existujuci.poznamka = existujuci.poznamka ? `${existujuci.poznamka} | ${z.poznamka}` : z.poznamka;
-        }
-        if (z.kontaktna_osoba && !existujuci.kontaktna_osoba) {
-          existujuci.kontaktna_osoba = z.kontaktna_osoba;
-        }
-        if (z.email && !existujuci.email) {
-          existujuci.email = z.email;
-        }
-        if (z.telefon && !existujuci.telefon) {
-          existujuci.telefon = z.telefon;
-        }
-        // Spojenie PDF / tabuľkových príloh
-        if (z.pdf_zoznam && z.pdf_zoznam.length > 0) {
-          existujuci.pdf_zoznam = (existujuci.pdf_zoznam || []).concat(z.pdf_zoznam);
-        }
-      } else {
-        mapaZaznamov.set(kluc, { ...z });
-      }
-    });
-
-    return Array.from(mapaZaznamov.values());
-  }
-
-  async function fetchCsvWithCorsFallback(rawUrl) {
-    let cleanUrl = rawUrl.trim();
-    if (cleanUrl.includes('/edit')) {
-      cleanUrl = cleanUrl.replace(/\/edit.*$/, '/export?format=csv');
-    }
-
-    try {
-      const res = await fetch(cleanUrl);
-      if (res.ok) {
-        return await res.text();
-      }
-    } catch (e) {
-      console.warn("Priamy fetch zablokovaný CORS, skúšam cez CORS proxy...");
-    }
-
-    try {
-      const proxyUrl1 = 'https://corsproxy.io/?' + encodeURIComponent(cleanUrl);
-      const res1 = await fetch(proxyUrl1);
-      if (res1.ok) {
-        return await res1.text();
-      }
-    } catch (e) {
-      console.warn("Corsproxy.io neúspešné, skúšam allorigins...");
-    }
-
-    const proxyUrl2 = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(cleanUrl);
-    const res2 = await fetch(proxyUrl2);
-    if (!res2.ok) {
-      throw new Error("Nepodarilo sa stiahnuť CSV ani cez proxy.");
-    }
-    return await res2.text();
-  }
-
-  async function importujZGoogleTabulky() {
-    let url = document.getElementById('googleSheetUrlInput').value.trim();
-    if (!url) {
-      url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQgt3n0pRhqgu5AYffwKAVH0Wz2T0KQrhCCf3epvg1rlo51Ar1V__hT0clpyDijPAzZVfB6TQ-eA8Hg/pub?output=csv';
-    }
-
-    try {
-      showToast("Sťahujem živé odpovede z Google Disku...", "info");
-      
-      const csvText = await fetchCsvWithCorsFallback(url);
-      
-      const workbook = XLSX.read(csvText, { type: 'string' });
-      const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
-      const data = XLSX.utils.sheet_to_json(worksheet);
-
-      if (!data || data.length === 0) {
-        showToast("Tabuľka neobsahuje žiadne dáta.", "error");
-        return;
-      }
-
-      let noveZaznamy = [];
-
-      for (let idx = 0; idx < data.length; idx++) {
-        const row = data[idx];
-        const orgName = getRowVal(row, ['2. Názov organizácie (OvZP PSK)', 'Názov organizácie', 'Názov', 'name']) || 'Neznáma organizácia';
-        const sektorVal = getRowVal(row, ['3. Sektor', 'Sektor', 'sektor']) || 'Správa';
-        const osobaVal = getRowVal(row, ['4. Meno a priezvisko kontaktnej osoby', 'Meno a priezvisko', 'Osoba', 'kontakt']) || '';
-        const emailVal = getRowVal(row, ['5. E-mailová adresa', 'E-mailová adresa', 'Email', 'email']) || '';
-        const telVal = getRowVal(row, ['6. Telefonický kontakt', 'Telefonický kontakt', 'Telefón', 'telefon']) || '';
-        
-        const bSpolu = parseInt(getRowVal(row, ['Celkový počet budov vo vašej správe (ktoré spadajú pod zákonnú povinnosť):', 'Celkový počet budov', 'Počet budov', 'budovy']) || 1);
-        const bMa = parseInt(getRowVal(row, ['Počet budov, ktoré MÁJÚ platný energetický certifikát: [ Zadať číslo ]', 'Počet budov, ktoré MÁJÚ platný energetický certifikát', 'S EC', 'ma_ec']) || 0);
-        const bNema = parseInt(getRowVal(row, ['Počet budov, ktoré NEMÁJÚ platný energetický certifikát: [ Zadať číslo ]', 'Počet budov, ktoré NEMÁJÚ platný energetický certifikát', 'Bez EC', 'nema_ec']) || 1);
-        
-        const poznamkaVal = getRowVal(row, ['Poznámka alebo špecifické informácie', 'Poznámka', 'poznamka']) || '';
-        const ecVal = getRowVal(row, ['Číslo EC', 'cislo_ec']) || '';
-
-        const lokDetekcia = detegujMestoAAdresu(String(orgName), String(poznamkaVal));
-
-        noveZaznamy.push({
-          id: 'gform-' + Date.now() + '-' + idx,
-          name: String(orgName).trim(),
-          sektor: String(sektorVal).trim(),
-          polis: lokDetekcia.mesto,
-          kontaktna_osoba: String(osobaVal).trim(),
-          email: String(emailVal).trim(),
-          telefon: String(telVal).trim(),
-          pocet_budov: isNaN(bSpolu) ? 1 : bSpolu,
-          pocet_ec_ma: isNaN(bMa) ? 0 : bMa,
-          pocet_ec_nema: isNaN(bNema) ? 1 : bNema,
-          cislo_ec: String(ecVal).trim(),
-          lat: lokDetekcia.coords[0],
-          lng: lokDetekcia.coords[1],
-          poznamka: String(poznamkaVal).trim(),
-          pdf_zoznam: [{
-            nazov: 'Odpovede z formulára (Google Sheet)',
-            url: 'https://docs.google.com/spreadsheets/d/1cP3kPxvX43HSWxitdGjBLwhZ_i03uA2zHHuo1G_dyJQ/edit',
-            cesta: 'Prepojené s Google Formulárom',
-            typ: 'sheet'
-          }]
-        });
-      }
-
-      // Automatické zlúčenie duplicít pri importe
-      lokality = zlúcDuplicity(noveZaznamy);
-      aktualizujUI();
-      document.getElementById('dataModal').style.display = 'none';
-      showToast(`Úspešne načítaných a skontrolovaných ${lokality.length} jedinečných záznamov!`, "success");
-    } catch (err) {
-      console.error(err);
-      showToast("Chyba pri sťahovaní. Skontrolujte publikovanie tabuľky na web.", "error");
-    }
-  }
-
-  function zobrazMapu() {
+  function aktualizujUI() {
+    // Vyčistenie mapových markerov
+    Object.values(markerMap).forEach(m => mapa.removeLayer(m));
     markerMap = {};
-    mapa.eachLayer(layer => { if (layer instanceof L.Marker) mapa.removeLayer(layer); });
 
-    getFilteredLokality().forEach((l) => {
-      const key = getStatusKey(l);
+    const zoznamDiv = document.getElementById('zoznamLokalit');
+    zoznamDiv.innerHTML = '';
+
+    const zobrazovane = getFilteredLokality();
+
+    zobrazovane.forEach((l, idx) => {
+      const statusKey = getStatusKey(l);
+      
+      // Vytvorenie Leaflet Markera
+      const marker = L.marker([l.lat, l.lng], { icon: markerIcons[statusKey] }).addTo(mapa);
+      
       let pdfHtml = '';
       if (l.pdf_zoznam && l.pdf_zoznam.length > 0) {
-        pdfHtml = '<div style="margin-top:6px; font-size:11px;"><b>Dokumenty & Tabuľky:</b><br>';
-        l.pdf_zoznam.forEach((p, idx) => {
-          const isSheet = p.typ === 'sheet' || (p.url && p.url.includes('docs.google.com/spreadsheets'));
-          const icon = isSheet ? '<i class="fas fa-file-excel" style="color:#217346;"></i>' : '<i class="fas fa-file-pdf" style="color:var(--danger-color);"></i>';
-          pdfHtml += `<div style="margin-top:2px;"><a href="#" id="map-pdf-${l.id}-${idx}" style="color:var(--text-color); font-weight:500;">${icon} ${p.nazov || 'Odkaz'}</a></div>`;
+        pdfHtml = `<div style="margin-top:6px; border-top:1px solid #eee; padding-top:4px;"><b>Dokumenty:</b><br>`;
+        l.pdf_zoznam.forEach(pdf => {
+          pdfHtml += `<a href="#" onclick="otvorSuborAleboOdkaz('${pdf.data || pdf.url || ''}'); return false;" style="color:var(--primary-color); text-decoration:underline; font-size:12px; display:block; margin-top:2px;">📄 ${pdf.nazov || 'Certifikát'}</a>`;
         });
-        pdfHtml += '</div>';
+        pdfHtml += `</div>`;
       }
 
-      const m = L.marker([l.lat, l.lng], { icon: markerIcons[key] }).addTo(mapa)
-        .bindPopup(`<strong>${l.name}</strong><br>
-                    <b>Sektor:</b> ${l.sektor || 'N/A'}<br>
-                    <b>Adresa / Mesto:</b> ${l.polis || 'N/A'}<br>
-                    <b>Budovy:</b> spolu ${l.pocet_budov || 0} (EC: ${l.pocet_ec_ma || 0} / Bez: ${l.pocet_ec_nema || 0})<br>
-                    <b>Číslo EC:</b> ${l.cislo_ec || 'Neuvedené'}<br>
-                    ${pdfHtml}
-                    <button onclick="upravZaznamPodlaId('${l.id}')" style="margin-top:8px; background:var(--primary-color); color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;"><i class="fas fa-edit"></i> Upraviť</button>`);
-      
-      m.on('popupopen', () => {
-        if (l.pdf_zoznam) {
-          l.pdf_zoznam.forEach((p, idx) => {
-            const el = document.getElementById(`map-pdf-${l.id}-${idx}`);
-            if (el) {
-              el.onclick = (e) => {
-                e.preventDefault();
-                otvorSuborAleboOdkaz(p.data || p.url);
-              };
-            }
-          });
-        }
-      });
-
-      markerMap[l.id] = m;
-    });
-  }
-
-  function zobrazZoznam() {
-    const container = document.getElementById('zoznamLokalit');
-    container.innerHTML = '';
-    const filtered = getFilteredLokality();
-
-    if (filtered.length === 0) {
-      container.innerHTML = '<div style="padding:10px; color:#70757A;">Žiadne záznamy.</div>';
-      return;
-    }
-
-    filtered.forEach((l, idx) => {
-      const statusKey = getStatusKey(l);
-      const badgeClass = statusKey === 'ok' ? 'badge-ok' : (statusKey === 'no' ? 'badge-no' : 'badge-partial');
-      const badgeText = statusKey === 'ok' ? 'Má EC' : (statusKey === 'no' ? 'Bez EC' : 'Čiastočne');
-
-      const hasPdf = l.pdf_zoznam && l.pdf_zoznam.some(p => (p.typ !== 'sheet' && !p.url.includes('spreadsheets')) && (p.data || p.url));
-      const hasSheet = l.pdf_zoznam && l.pdf_zoznam.some(p => p.typ === 'sheet' || (p.url && p.url.includes('spreadsheets')));
-
-      const pdfIconHtml = hasPdf ? `<i class="fas fa-file-pdf" style="color:var(--danger-color); margin-left:6px;" title="Obsahuje PDF"></i>` : '';
-      const sheetIconHtml = hasSheet ? `<i class="fas fa-file-excel" style="color:#217346; margin-left:4px;" title="Obsahuje Google Tabuľku"></i>` : '';
-
-      const el = document.createElement('div');
-      el.className = 'lokalita';
-      el.onclick = () => {
-        mapa.setView([l.lat, l.lng], 15);
-        if (markerMap[l.id]) markerMap[l.id].openPopup();
-      };
-      
-      el.innerHTML = `
-        <div class="lokalita-info">
-          <strong>${l.name} ${pdfIconHtml}${sheetIconHtml}</strong>
-          <span class="badge ${badgeClass}">${badgeText}</span><br>
-          <small>${l.sektor || 'N/A'} | ${l.polis || 'N/A'}</small>
-        </div>
-        <div class="lokalita-actions">
-          <button class="edit-btn" onclick="event.stopPropagation(); upravZaznam(${idx})"><i class="fas fa-edit"></i></button>
+      const popupContent = `
+        <div style="font-family:sans-serif; min-width:200px;">
+          <h4 style="margin:0 0 5px 0; color:var(--primary-color);">${l.name}</h4>
+          <b>Sektor:</b> ${l.sektor || '-'}<br>
+          <b>Adresa:</b> ${l.polis || '-'}<br>
+          <b>Kontakt:</b> ${l.kontaktna_osoba || '-'} (${l.email || l.telefon || '-'})<br>
+          <b>Číslo EC:</b> ${l.cislo_ec || '-'}<br>
+          <b>Budovy celkovo:</b> ${l.pocet_budov || 0} (S EC: ${l.pocet_ec_ma || 0}, Bez EC: ${l.pocet_ec_nema || 0})<br>
+          ${pdfHtml}
         </div>
       `;
-      container.appendChild(el);
+      marker.bindPopup(popupContent);
+      markerMap[l.id || idx] = marker;
+
+      // Vytvorenie položky v zozname (sidebar)
+      const item = document.createElement('div');
+      item.className = 'lokalita';
+      
+      let badgeClass = 'badge-partial';
+      let badgeText = 'Čiastočné EC';
+      if (statusKey === 'ok') { badgeClass = 'badge-ok'; badgeText = 'Platné EC'; }
+      if (statusKey === 'no') { badgeClass = 'badge-no'; badgeText = 'Bez EC'; }
+
+      item.innerHTML = `
+        <div class="lokalita-info" onclick="centrujMapu(${l.lat}, ${l.lng}, '${l.id || idx}')">
+          <strong>${l.name}</strong>
+          <span class="badge ${badgeClass}">${badgeText}</span>
+          <div style="color:var(--light-text-color); margin-top:4px;">📍 ${l.polis || 'Nezadaná adresa'}</div>
+        </div>
+        <div class="lokalita-actions">
+          <button class="edit-btn" onclick="otvorEditModal(${lokality.indexOf(l)})" title="Upraviť"><i class="fas fa-edit"></i></button>
+          <button class="btn-danger" onclick="vymazLokalitu(${lokality.indexOf(l)})" title="Vymazať"><i class="fas fa-trash"></i></button>
+        </div>
+      `;
+      zoznamDiv.appendChild(item);
     });
+
+    naplnMestaFilter();
   }
 
-  function upravZaznam(idx) {
-    const l = getFilteredLokality()[idx];
-    const realIdx = lokality.findIndex(item => item === l);
-    otvorModalFormular(realIdx, l);
+  function centrujMapu(lat, lng, id) {
+    mapa.setView([lat, lng], 14);
+    if (markerMap[id]) {
+      markerMap[id].openPopup();
+    }
   }
 
-  function upravZaznamPodlaId(id) {
-    const realIdx = lokality.findIndex(item => item.id === id);
-    if (realIdx !== -1) otvorModalFormular(realIdx, lokality[realIdx]);
-  }
-
-  function otvorModalFormular(realIdx, l) {
-    document.getElementById('editIndex').value = realIdx;
+  function otvorEditModal(index) {
+    const l = lokality[index];
+    document.getElementById('editIndex').value = index;
     document.getElementById('editId').value = l.id || '';
     document.getElementById('editName').value = l.name || '';
     document.getElementById('editSektor').value = l.sektor || 'Kultúra';
@@ -1033,104 +880,288 @@
     document.getElementById('editOsoba').value = l.kontaktna_osoba || '';
     document.getElementById('editEmail').value = l.email || '';
     document.getElementById('editTelefon').value = l.telefon || '';
-    document.getElementById('editPocetBudov').value = l.pocet_budov || 0;
+    document.getElementById('editCisloEC').value = l.cislo_ec || '';
+    document.getElementById('editPocetBudov').value = l.pocet_budov || 1;
     document.getElementById('editPocetMa').value = l.pocet_ec_ma || 0;
     document.getElementById('editPocetNema').value = l.pocet_ec_nema || 0;
-    document.getElementById('editCisloEC').value = l.cislo_ec || '';
-    document.getElementById('editLat').value = l.lat || 48.9984;
-    document.getElementById('editLng').value = l.lng || 21.2393;
+    document.getElementById('editLat').value = l.lat;
+    document.getElementById('editLng').value = l.lng;
     document.getElementById('editPoznamka').value = l.poznamka || '';
 
-    const pdfContainer = document.getElementById('pdfContainer');
-    pdfContainer.innerHTML = '';
-    
-    if (l.pdf_zoznam && l.pdf_zoznam.length > 0) {
-      l.pdf_zoznam.forEach(p => {
-        pridajPdfRiadok(p.nazov, p.data || '', p.url || '', p.cesta || '', p.typ || 'pdf');
+    const container = document.getElementById('pdfContainer');
+    container.innerHTML = '';
+    if (l.pdf_zoznam) {
+      l.pdf_zoznam.forEach(pdf => {
+        pridajPdfRiadok(pdf.nazov, pdf.data, pdf.url, pdf.cesta, pdf.typ || 'pdf');
       });
     }
+
+    document.getElementById('modalTitle').textContent = 'Úprava záznamu EC';
     document.getElementById('editModal').style.display = 'block';
   }
 
-  document.getElementById('closeEditModal').onclick = () => document.getElementById('editModal').style.display = 'none';
+  function vymazLokalitu(index) {
+    if (confirm('Naozaj chcete vymazať túto organizáciu zo zoznamu?')) {
+      lokality.splice(index, 1);
+      ulozDoLocalStorage();
+      aktualizujUI();
+      showToast('Záznam bol vymazaný', 'error');
+    }
+  }
 
-  document.getElementById('editForm').onsubmit = (e) => {
+  function clearAllData() {
+    if (confirm('POZOR: Naozaj chcete vymazať VŠETKY dátové záznamy? Tátová akcia je nevratná.')) {
+      lokality = [];
+      localStorage.removeItem('ec_budovy_data');
+      aktualizujUI();
+      document.getElementById('dataModal').style.display = 'none';
+      showToast('Všetky dáta boli vymazané.', 'error');
+    }
+  }
+
+  function ulozDoLocalStorage() {
+    try {
+      localStorage.setItem('ec_budovy_data', JSON.stringify(lokality));
+    } catch (e) {
+      showToast('Kapacita lokálneho úložiska bola prekročená! Odporúčame stiahnuť JSON zálohu.', 'error');
+    }
+  }
+
+  function ulozLokality() {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(lokality, null, 2));
+    const dlAnchorElem = document.createElement('a');
+    dlAnchorElem.setAttribute("href", dataStr);
+    dlAnchorElem.setAttribute("download", `ec_budovy_zaloha_${new Date().toISOString().slice(0,10)}.json`);
+    dlAnchorElem.click();
+    showToast('Záloha bola stiahnutá.', 'success');
+  }
+
+  // Spracovanie formulára pre Pridanie/Editáciu
+  document.getElementById('editForm').onsubmit = function(e) {
     e.preventDefault();
-    const realIdx = parseInt(document.getElementById('editIndex').value);
+    const index = parseInt(document.getElementById('editIndex').value);
     
+    const pdfRows = document.querySelectorAll('#pdfContainer .pdf-row');
     const pdfZoznam = [];
-    document.querySelectorAll('#pdfContainer .pdf-row').forEach(row => {
-      const nazov = row.querySelector('.pdf-nazov').value.trim();
-      const cestaVal = row.querySelector('.pdf-cesta').value.trim();
+    pdfRows.forEach(row => {
+      const nazov = row.querySelector('.pdf-nazov').value;
+      const cesta = row.querySelector('.pdf-cesta').value;
       const urlInput = row.querySelector('.pdf-url-input');
-      const urlVal = urlInput ? urlInput.value.trim() : '';
+      const url = urlInput ? urlInput.value : '';
       const typ = row.getAttribute('data-typ') || 'pdf';
-
-      if (nazov || urlVal || cestaVal) {
-        pdfZoznam.push({
-          nazov: nazov || (typ === 'sheet' ? 'Google Tabuľka' : 'Certifikát'),
-          data: '',
-          url: urlVal,
-          cesta: cestaVal,
-          typ: typ
-        });
-      }
+      pdfZoznam.push({ nazov, url, cesta, typ });
     });
 
-    const recordData = {
-      id: document.getElementById('editId').value || ('ec-' + Date.now()),
-      name: document.getElementById('editName').value.trim(),
+    const zaznam = {
+      id: document.getElementById('editId').value || 'id_' + Date.now(),
+      name: document.getElementById('editName').value,
       sektor: document.getElementById('editSektor').value,
-      polis: document.getElementById('editPolis').value.trim(),
-      kontaktna_osoba: document.getElementById('editOsoba').value.trim(),
-      email: document.getElementById('editEmail').value.trim(),
-      telefon: document.getElementById('editTelefon').value.trim(),
+      polis: document.getElementById('editPolis').value,
+      kontaktna_osoba: document.getElementById('editOsoba').value,
+      email: document.getElementById('editEmail').value,
+      telefon: document.getElementById('editTelefon').value,
+      cislo_ec: document.getElementById('editCisloEC').value,
       pocet_budov: parseInt(document.getElementById('editPocetBudov').value) || 0,
       pocet_ec_ma: parseInt(document.getElementById('editPocetMa').value) || 0,
       pocet_ec_nema: parseInt(document.getElementById('editPocetNema').value) || 0,
-      cislo_ec: document.getElementById('editCisloEC').value.trim(),
-      lat: parseFloat(document.getElementById('editLat').value) || 48.9984,
-      lng: parseFloat(document.getElementById('editLng').value) || 21.2393,
-      poznamka: document.getElementById('editPoznamka').value.trim(),
+      lat: parseFloat(document.getElementById('editLat').value),
+      lng: parseFloat(document.getElementById('editLng').value),
+      poznamka: document.getElementById('editPoznamka').value,
       pdf_zoznam: pdfZoznam
     };
 
-    if (isNaN(realIdx) || realIdx === -1 || realIdx >= lokality.length) {
-      lokality.push(recordData);
+    if (index >= 0) {
+      lokality[index] = zaznam;
+      showToast('Záznam úspešne upravený', 'success');
     } else {
-      lokality[realIdx] = recordData;
+      lokality.push(zaznam);
+      showToast('Nová organizácia pridaná', 'success');
     }
 
-    // Aplikovanie kontroly duplicít aj pri manuálnom uložení
-    lokality = zlúcDuplicity(lokality);
+    ulozDoLocalStorage();
     aktualizujUI();
     document.getElementById('editModal').style.display = 'none';
-    showToast("Záznam úspešne uložený a skontrolovaný na duplicity!", "success");
   };
 
-  function ulozLokality() {
-    const data = JSON.stringify(lokality, null, 2);
-    const blob = new Blob([data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'zaloha_evidencia_ec.json'; a.click();
-    URL.revokeObjectURL(url);
-    showToast("Záloha vytvorená!", "success");
+  // Načítanie z Google Tabuľky (CSV)
+  async function importujZGoogleTabulky() {
+    const url = document.getElementById('googleSheetUrlInput').value.trim();
+    if (!url) {
+      showToast('Zadajte platnú CSV URL Google Tabuľky!', 'error');
+      return;
+    }
+
+    try {
+      showToast('Načítavam dáta z Google Tabuľky...', 'info');
+      const resp = await fetch(url);
+      const csvText = await resp.text();
+      
+      const workbook = XLSX.read(csvText, { type: 'string' });
+      const sheetName = workbook.SheetNames[0];
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+
+      if (!rows || rows.length === 0) {
+        showToast('Google Tabuľka neobsahuje žiadne dáta.', 'error');
+        return;
+      }
+
+      let noveLokality = [];
+      rows.forEach(r => {
+        const orgName = getRowVal(r, ['Názov organizácie (OvZP PSK)', 'Názov organizácie', 'Organizácia', 'Názov', 'Name']);
+        if (!orgName) return;
+
+        const adresaVal = getRowVal(r, ['Adresa organizácie / Mesto', 'Adresa organizácie', 'Adresa', 'Mesto', 'Polis', 'Sídlo']);
+        const poznamkaVal = getRowVal(r, ['Poznámka', 'Poznamka', 'Poznámky', 'Špecifické informácie']);
+
+        // Tu sa poloha určuje prioritne z adresy
+        const detekcia = detegujMestoAAdresu(orgName, poznamkaVal, adresaVal);
+
+        const maEC = parseInt(getRowVal(r, ['Počet budov S platným EC', 'S platným EC', 'Ma EC'])) || 0;
+        const nemaEC = parseInt(getRowVal(r, ['Počet budov BEZ platného EC', 'BEZ platného EC', 'Nema EC'])) || 0;
+        const celkovo = parseInt(getRowVal(r, ['Celkový počet budov v správe', 'Počet budov', 'Celkovo'])) || (maEC + nemaEC) || 1;
+
+        noveLokality.push({
+          id: 'gs_' + Math.random().toString(36).substr(2, 9),
+          name: orgName,
+          sektor: getRowVal(r, ['Sektor', 'Oblasť']) || 'Správa',
+          polis: adresaVal || detekcia.mesto,
+          kontaktna_osoba: getRowVal(r, ['Kontaktná osoba', 'Osoba', 'Meno']),
+          email: getRowVal(r, ['E-mailová adresa', 'Email', 'E-mail']),
+          telefon: getRowVal(r, ['Telefonický kontakt', 'Telefon', 'Telefón', 'Tel']),
+          cislo_ec: getRowVal(r, ['Číslo EC', 'Cislo EC', 'EC']),
+          pocet_budov: celkovo,
+          pocet_ec_ma: maEC,
+          pocet_ec_nema: nemaEC,
+          lat: detekcia.coords[0],
+          lng: detekcia.coords[1],
+          poznamka: poznamkaVal,
+          pdf_zoznam: []
+        });
+      });
+
+      if (noveLokality.length > 0) {
+        lokality = noveLokality;
+        ulozDoLocalStorage();
+        aktualizujUI();
+        document.getElementById('dataModal').style.display = 'none';
+        showToast(`Úspešne načítaných ${noveLokality.length} záznamov z Google Tabuľky!`, 'success');
+      } else {
+        showToast('Nenašli sa žiadne platné záznamy v tabuľke.', 'error');
+      }
+
+    } catch (err) {
+      console.error(err);
+      showToast('Chyba pri načítavaní Google Tabuľky. Skontrolujte pripojenie a URL.', 'error');
+    }
   }
 
+  // Import z Excelu / CSV súboru z PC
+  document.getElementById('fileInput').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+      try {
+        const data = evt.target.result;
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+
+        let importovane = [];
+        rows.forEach(r => {
+          const orgName = getRowVal(r, ['Názov organizácie (OvZP PSK)', 'Názov organizácie', 'Organizácia', 'Názov']);
+          if (!orgName) return;
+
+          const adresaVal = getRowVal(r, ['Adresa organizácie / Mesto', 'Adresa organizácie', 'Adresa', 'Mesto', 'Polis']);
+          const poznamkaVal = getRowVal(r, ['Poznámka', 'Poznamka']);
+
+          // Určenie polohy s prioritou z adresy
+          const detekcia = detegujMestoAAdresu(orgName, poznamkaVal, adresaVal);
+
+          const maEC = parseInt(getRowVal(r, ['Počet budov S platným EC', 'Ma EC'])) || 0;
+          const nemaEC = parseInt(getRowVal(r, ['Počet budov BEZ platného EC', 'Nema EC'])) || 0;
+
+          importovane.push({
+            id: 'imp_' + Math.random().toString(36).substr(2, 9),
+            name: orgName,
+            sektor: getRowVal(r, ['Sektor']) || 'Správa',
+            polis: adresaVal || detekcia.mesto,
+            kontaktna_osoba: getRowVal(r, ['Kontaktná osoba', 'Osoba']),
+            email: getRowVal(r, ['E-mailová adresa', 'Email']),
+            telefon: getRowVal(r, ['Telefonický kontakt', 'Telefon']),
+            cislo_ec: getRowVal(r, ['Číslo EC', 'EC']),
+            pocet_budov: parseInt(getRowVal(r, ['Celkový počet budov v správe'])) || (maEC + nemaEC) || 1,
+            pocet_ec_ma: maEC,
+            pocet_ec_nema: nemaEC,
+            lat: parseFloat(getRowVal(r, ['Lat', 'Šírka'])) || detekcia.coords[0],
+            lng: parseFloat(getRowVal(r, ['Lng', 'Dĺžka'])) || detekcia.coords[1],
+            poznamka: poznamkaVal,
+            pdf_zoznam: []
+          });
+        });
+
+        if (importovane.length > 0) {
+          lokality = importovane;
+          ulozDoLocalStorage();
+          aktualizujUI();
+          document.getElementById('dataModal').style.display = 'none';
+          showToast(`Importovaných ${importovane.length} záznamov.`, 'success');
+        }
+      } catch (err) {
+        showToast('Chyba pri spracovaní súboru!', 'error');
+      }
+    };
+    reader.readAsBinaryString(file);
+  });
+
+  // Export do Excelu
+  document.getElementById('exportBtn').onclick = function() {
+    if (lokality.length === 0) {
+      showToast('Žiadne dáta na export.', 'error');
+      return;
+    }
+
+    const exportRows = lokality.map(l => ({
+      'Názov organizácie (OvZP PSK)': l.name,
+      'Sektor': l.sektor,
+      'Adresa organizácie / Mesto': l.polis,
+      'Kontaktná osoba': l.kontaktna_osoba,
+      'E-mailová adresa': l.email,
+      'Telefonický kontakt': l.telefon,
+      'Číslo EC': l.cislo_ec,
+      'Celkový počet budov v správe': l.pocet_budov,
+      'Počet budov S platným EC': l.pocet_ec_ma,
+      'Počet budov BEZ platného EC': l.pocet_ec_nema,
+      'Šírka (Lat)': l.lat,
+      'Dĺžka (Lng)': l.lng,
+      'Poznámka': l.poznamka
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportRows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Evidencia EC");
+    XLSX.writeFile(wb, `evidencia_ec_budov_${new Date().toISOString().slice(0,10)}.xlsx`);
+    showToast('Export do Excelu prebehol úspešne.', 'success');
+  };
+
+  // Načítanie JSON databázy (Nahradenie / Pripojenie)
   document.getElementById('jsonReplaceInput').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = function(evt) {
       try {
-        const loaded = JSON.parse(evt.target.result);
-        lokality = zlúcDuplicity(loaded);
-        aktualizujUI();
-        document.getElementById('dataModal').style.display = 'none';
-        showToast("Celá databáza úspešne nahradená a prečistená od duplicít!", "success");
+        const parsed = JSON.parse(evt.target.result);
+        if (Array.isArray(parsed)) {
+          lokality = parsed;
+          ulozDoLocalStorage();
+          aktualizujUI();
+          document.getElementById('dataModal').style.display = 'none';
+          showToast('Databáza bola úspešne nahradená.', 'success');
+        }
       } catch (err) {
-        showToast("Chyba pri čítaní JSON súboru.", "error");
+        showToast('Neplatný formát JSON súboru.', 'error');
       }
     };
     reader.readAsText(file);
@@ -1142,136 +1173,84 @@
     const reader = new FileReader();
     reader.onload = function(evt) {
       try {
-        const loaded = JSON.parse(evt.target.result);
-        if (Array.isArray(loaded)) {
-          lokality = zlúcDuplicity(lokality.concat(loaded));
+        const parsed = JSON.parse(evt.target.result);
+        if (Array.isArray(parsed)) {
+          lokality = lokality.concat(parsed);
+          ulozDoLocalStorage();
           aktualizujUI();
           document.getElementById('dataModal').style.display = 'none';
-          showToast(`Pridané záznamy a úspešne zlúčené prípadné duplicity!`, "success");
+          showToast(`Pridaných ${parsed.length} záznamov.`, 'success');
         }
       } catch (err) {
-        showToast("Chyba pri čítaní JSON súboru.", "error");
+        showToast('Neplatný formát JSON súboru.', 'error');
       }
     };
     reader.readAsText(file);
   });
 
-  document.getElementById('fileInput').addEventListener('change', function(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function(evt) {
-      try {
-        const workbook = XLSX.read(evt.target.result, { type: 'binary' });
-        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-        const data = XLSX.utils.sheet_to_json(worksheet);
-
-        if (!data || data.length === 0) {
-          showToast("Súbor neobsahuje dáta.", "error");
-          return;
-        }
-
-        let noveZaznamy = data.map((row, idx) => {
-          const orgName = getRowVal(row, ['2. Názov organizácie (OvZP PSK)', 'Názov organizácie', 'Názov', 'name']) || 'Neznáma organizácia';
-          const sektorVal = getRowVal(row, ['3. Sektor', 'Sektor', 'sektor']) || 'Správa';
-          const osobaVal = getRowVal(row, ['4. Meno a priezvisko kontaktnej osoby', 'Meno a priezvisko', 'Osoba']) || '';
-          const emailVal = getRowVal(row, ['5. E-mailová adresa', 'E-mailová adresa', 'Email']) || '';
-          const telVal = getRowVal(row, ['6. Telefonický kontakt', 'Telefonický kontakt', 'Telefón']) || '';
-          
-          const bSpolu = parseInt(getRowVal(row, ['Celkový počet budov vo vašej správe (ktoré spadajú pod zákonnú povinnosť):', 'Celkový počet budov', 'Počet budov']) || 1);
-          const bMa = parseInt(getRowVal(row, ['Počet budov, ktoré MÁJÚ platný energetický certifikát: [ Zadať číslo ]', 'S EC', 'ma_ec']) || 0);
-          const bNema = parseInt(getRowVal(row, ['Počet budov, ktoré NEMÁJÚ platný energetický certifikát: [ Zadať číslo ]', 'Bez EC', 'nema_ec']) || 1);
-          
-          const poznamkaVal = getRowVal(row, ['Poznámka alebo špecifické informácie', 'Poznámka']) || '';
-          const ecVal = getRowVal(row, ['Číslo EC']) || '';
-
-          const lokDetekcia = detegujMestoAAdresu(String(orgName), String(poznamkaVal));
-
-          return {
-            id: 'file-' + Date.now() + '-' + idx,
-            name: String(orgName).trim(),
-            sektor: String(sektorVal).trim(),
-            polis: lokDetekcia.mesto,
-            kontaktna_osoba: String(osobaVal).trim(),
-            email: String(emailVal).trim(),
-            telefon: String(telVal).trim(),
-            pocet_budov: isNaN(bSpolu) ? 1 : bSpolu,
-            pocet_ec_ma: isNaN(bMa) ? 0 : bMa,
-            pocet_ec_nema: isNaN(bNema) ? 1 : bNema,
-            cislo_ec: String(ecVal).trim(),
-            lat: lokDetekcia.coords[0],
-            lng: lokDetekcia.coords[1],
-            poznamka: String(poznamkaVal).trim(),
-            pdf_zoznam: []
-          };
-        });
-
-        lokality = zlúcDuplicity(lokality.concat(noveZaznamy));
-        aktualizujUI();
-        document.getElementById('dataModal').style.display = 'none';
-        showToast(`Súbor importovaný a duplicity boli úspešne zlúčené!`, "success");
-      } catch (err) {
-        showToast("Chyba pri spracovaní súboru.", "error");
-      }
-    };
-    reader.readAsBinaryString(file);
-  });
-
-  function clearAllData() {
-    if (confirm("Vymazať všetky dáta?")) {
-      lokality = [];
-      localStorage.removeItem("evidenciaEC_PSK");
-      aktualizujUI();
-      document.getElementById('dataModal').style.display = 'none';
-      showToast("Všetky dáta vymazané", "error");
-    }
-  }
-
-  function aktualizujUI() {
-    localStorage.setItem("evidenciaEC_PSK", JSON.stringify(lokality));
-    naplnMestaFilter();
-    zobrazMapu();
-    zobrazZoznam();
-  }
-
-  function initApp() {
-    const saved = localStorage.getItem("evidenciaEC_PSK");
-    if (saved) {
-      try { lokality = zlúcDuplicity(JSON.parse(saved)); } catch (e) { lokality = []; }
-    }
-    aktualizujUI();
-  }
-
-  document.querySelector('.basemap-switcher-header').addEventListener('click', () => {
-    document.querySelector('.basemap-options').classList.toggle('hidden');
-  });
-
-  document.getElementById('basemap-switcher').addEventListener('change', (e) => {
-    if (e.target.name === 'basemap') {
-      mapa.removeLayer(currentBasemap);
-      switch (e.target.value) {
-        case 'osm': currentBasemap = osmLayer.addTo(mapa); break;
-        case 'google-streets': currentBasemap = googleStreets.addTo(mapa); break;
-        case 'google-satellite': currentBasemap = googleSat.addTo(mapa); break;
-        case 'google-hybrid': currentBasemap = googleHybrid.addTo(mapa); break;
-      }
-    }
-  });
-
+  // Event Listenery pre filtre
   document.getElementById('searchFilter').addEventListener('input', aktualizujUI);
   document.getElementById('filterSektor').addEventListener('change', aktualizujUI);
   document.getElementById('filterStatus').addEventListener('change', aktualizujUI);
   document.getElementById('filterMesto').addEventListener('change', aktualizujUI);
   document.getElementById('filterMinBudov').addEventListener('input', aktualizujUI);
 
-  const toggleSidebarBtn = document.getElementById('toggleSidebar');
-  toggleSidebarBtn.addEventListener('click', () => {
-    document.getElementById('sidebar').classList.toggle('collapsed');
-    document.getElementById('obsah').classList.toggle('fullscreen');
+  // Zavretie modulov
+  document.getElementById('closeEditModal').onclick = () => document.getElementById('editModal').style.display = 'none';
+  window.onclick = function(event) {
+    if (event.target == document.getElementById('editModal')) document.getElementById('editModal').style.display = 'none';
+    if (event.target == document.getElementById('dataModal')) document.getElementById('dataModal').style.display = 'none';
+  };
+
+  // Prepínanie bočného panela
+  const toggleBtn = document.getElementById('toggleSidebar');
+  const sidebar = document.getElementById('sidebar');
+  toggleBtn.onclick = function() {
+    sidebar.classList.toggle('collapsed');
+    const isCollapsed = sidebar.classList.contains('collapsed');
+    toggleBtn.innerHTML = isCollapsed ? '<i class="fas fa-chevron-left"></i>' : '<i class="fas fa-chevron-right"></i>';
+    toggleBtn.title = isCollapsed ? 'Zobraziť panel' : 'Skryť panel';
     setTimeout(() => mapa.invalidateSize(), 300);
+  };
+
+  // Prepínanie základnej mapy
+  const basemapSwitcherHeader = document.querySelector('.basemap-switcher-header');
+  const basemapOptions = document.querySelector('.basemap-options');
+  basemapSwitcherHeader.onclick = () => {
+    basemapOptions.classList.toggle('hidden');
+    basemapSwitcherHeader.querySelector('.fa-chevron-right').classList.toggle('fa-rotate-90');
+  };
+
+  document.querySelectorAll('input[name="basemap"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+      mapa.removeLayer(currentBasemap);
+      if (this.value === 'osm') currentBasemap = osmLayer;
+      if (this.value === 'google-streets') currentBasemap = googleStreets;
+      if (this.value === 'google-satellite') currentBasemap = googleSat;
+      if (this.value === 'google-hybrid') currentBasemap = googleHybrid;
+      currentBasemap.addTo(mapa);
+    });
   });
 
-  initApp();
+  // Inicializácia pri načítaní stránky
+  window.onload = function() {
+    const saved = localStorage.getItem('ec_budovy_data');
+    if (saved) {
+      try {
+        lokality = JSON.parse(saved);
+      } catch (e) {
+        lokality = [];
+      }
+    }
+    
+    // Ak sú dáta prázdne, automaticky ich načítame z Google Tabuľky
+    if (lokality.length === 0) {
+      importujZGoogleTabulky();
+    } else {
+      aktualizujUI();
+    }
+  };
 </script>
+
 </body>
 </html>
