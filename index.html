@@ -500,7 +500,7 @@
     'partial': L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-orange.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34] })
   };
 
-  // Databáza súradníc miest v Prešovskom kraji pre presné umiestnenie na mape podrobne
+  // Databáza súradníc miest v Prešovskom kraji
   const mestoCoordinates = {
     'prešov': [48.9984, 21.2393],
     'poprad': [49.0595, 20.2977],
@@ -518,11 +518,11 @@
     'medzilaborce': [49.2708, 21.9056],
     'sabinov': [49.1025, 21.0981],
     'giraltovce': [49.1128, 21.5173],
-    'vysoce tatry': [49.1381, 20.2185],
+    'vysoké tatry': [49.1381, 20.2185],
     'smokovec': [49.1415, 20.2227],
     'horný smokovec': [49.1415, 20.2227],
     'batizovce': [49.0761, 20.1818],
-    'licartovce': [48.8778, 21.2403],
+    'ličartovce': [48.8778, 21.2403],
     'legnava': [49.3361, 20.8358]
   };
 
@@ -745,7 +745,6 @@
   function detegujMestoAAdresu(orgName, poznamkaVal) {
     const text = (orgName + " " + poznamkaVal).toLowerCase();
     
-    // Ak názov obsahuje ulicu a mesto oddelené čiarkou (napr. "Gymnázium, Konštantínova 1751/64, Stropkov")
     if (orgName.includes(',')) {
       const casti = orgName.split(',');
       if (casti.length >= 2) {
@@ -755,29 +754,69 @@
           if (mestoCoordinates[mKey]) {
             return {
               mesto: poslednaCast,
-              coords: [mestoCoordinates[mKey][0] + (Math.random() * 0.02 - 0.01), mestoCoordinates[mKey][1] + (Math.random() * 0.02 - 0.01)]
+              coords: [mestoCoordinates[mKey][0] + (Math.random() * 0.01 - 0.005), mestoCoordinates[mKey][1] + (Math.random() * 0.01 - 0.005)]
             };
           }
         }
       }
     }
 
-    // Vyhľadávanie podľa kľúčových slov v texte
     for (const [mestoKey, coords] of Object.entries(mestoCoordinates)) {
       if (text.includes(mestoKey)) {
         const velkymiMesto = mestoKey.charAt(0).toUpperCase() + mestoKey.slice(1);
         return {
           mesto: velkymiMesto,
-          coords: [coords[0] + (Math.random() * 0.02 - 0.01), coords[1] + (Math.random() * 0.02 - 0.01)]
+          coords: [coords[0] + (Math.random() * 0.01 - 0.005), coords[1] + (Math.random() * 0.01 - 0.005)]
         };
       }
     }
 
-    // Výchozie hodnoty ak mesto nie je v názve
     return {
       mesto: 'Prešov',
-      coords: [48.9984 + (Math.random() * 0.06 - 0.03), 21.2393 + (Math.random() * 0.06 - 0.03)]
+      coords: [48.9984 + (Math.random() * 0.04 - 0.02), 21.2393 + (Math.random() * 0.04 - 0.02)]
     };
+  }
+
+  // Funkcia na zlúčenie duplicitných záznamov podľa názvu organizácie
+  function zlúcDuplicity(zaznamy) {
+    const mapaZaznamov = new Map();
+
+    zaznamy.forEach(z => {
+      // Normalizácia názvu pre spoľahlivé porovnanie dufíc (malé písmená, bez zbytočných medzier)
+      const kluc = z.name.trim().toLowerCase();
+
+      if (mapaZaznamov.has(kluc)) {
+        const existujuci = mapaZaznamov.get(kluc);
+        // Zlúčenie hodnôt
+        existujuci.pocet_budov = (existujuci.pocet_budov || 0) + (z.pocet_budov || 0);
+        existujuci.pocet_ec_ma = (existujuci.pocet_ec_ma || 0) + (z.pocet_ec_ma || 0);
+        existujuci.pocet_ec_nema = (existujuci.pocet_ec_nema || 0) + (z.pocet_ec_nema || 0);
+        
+        if (z.cislo_ec && !existujuci.cislo_ec.includes(z.cislo_ec)) {
+          existujuci.cislo_ec = existujuci.cislo_ec ? `${existujuci.cislo_ec}, ${z.cislo_ec}` : z.cislo_ec;
+        }
+        if (z.poznamka && !existujuci.poznamka.includes(z.poznamka)) {
+          existujuci.poznamka = existujuci.poznamka ? `${existujuci.poznamka} | ${z.poznamka}` : z.poznamka;
+        }
+        if (z.kontaktna_osoba && !existujuci.kontaktna_osoba) {
+          existujuci.kontaktna_osoba = z.kontaktna_osoba;
+        }
+        if (z.email && !existujuci.email) {
+          existujuci.email = z.email;
+        }
+        if (z.telefon && !existujuci.telefon) {
+          existujuci.telefon = z.telefon;
+        }
+        // Spojenie PDF / tabuľkových príloh
+        if (z.pdf_zoznam && z.pdf_zoznam.length > 0) {
+          existujuci.pdf_zoznam = (existujuci.pdf_zoznam || []).concat(z.pdf_zoznam);
+        }
+      } else {
+        mapaZaznamov.set(kluc, { ...z });
+      }
+    });
+
+    return Array.from(mapaZaznamov.values());
   }
 
   async function fetchCsvWithCorsFallback(rawUrl) {
@@ -834,7 +873,10 @@
         return;
       }
 
-      let noveZaznamy = data.map((row, idx) => {
+      let noveZaznamy = [];
+
+      for (let idx = 0; idx < data.length; idx++) {
+        const row = data[idx];
         const orgName = getRowVal(row, ['2. Názov organizácie (OvZP PSK)', 'Názov organizácie', 'Názov', 'name']) || 'Neznáma organizácia';
         const sektorVal = getRowVal(row, ['3. Sektor', 'Sektor', 'sektor']) || 'Správa';
         const osobaVal = getRowVal(row, ['4. Meno a priezvisko kontaktnej osoby', 'Meno a priezvisko', 'Osoba', 'kontakt']) || '';
@@ -848,10 +890,9 @@
         const poznamkaVal = getRowVal(row, ['Poznámka alebo špecifické informácie', 'Poznámka', 'poznamka']) || '';
         const ecVal = getRowVal(row, ['Číslo EC', 'cislo_ec']) || '';
 
-        // Automatické zistenie mesta a súradníc priamo z NÁZVU
         const lokDetekcia = detegujMestoAAdresu(String(orgName), String(poznamkaVal));
 
-        return {
+        noveZaznamy.push({
           id: 'gform-' + Date.now() + '-' + idx,
           name: String(orgName).trim(),
           sektor: String(sektorVal).trim(),
@@ -872,13 +913,14 @@
             cesta: 'Prepojené s Google Formulárom',
             typ: 'sheet'
           }]
-        };
-      });
+        });
+      }
 
-      lokality = noveZaznamy;
+      // Automatické zlúčenie duplicít pri importe
+      lokality = zlúcDuplicity(noveZaznamy);
       aktualizujUI();
       document.getElementById('dataModal').style.display = 'none';
-      showToast(`Úspešne načítaných ${noveZaznamy.length} odpovedí z Google Formulára!`, "success");
+      showToast(`Úspešne načítaných a skontrolovaných ${lokality.length} jedinečných záznamov!`, "success");
     } catch (err) {
       console.error(err);
       showToast("Chyba pri sťahovaní. Skontrolujte publikovanie tabuľky na web.", "error");
@@ -1059,9 +1101,11 @@
       lokality[realIdx] = recordData;
     }
 
+    // Aplikovanie kontroly duplicít aj pri manuálnom uložení
+    lokality = zlúcDuplicity(lokality);
     aktualizujUI();
     document.getElementById('editModal').style.display = 'none';
-    showToast("Záznam úspešne uložený!", "success");
+    showToast("Záznam úspešne uložený a skontrolovaný na duplicity!", "success");
   };
 
   function ulozLokality() {
@@ -1080,10 +1124,11 @@
     const reader = new FileReader();
     reader.onload = function(evt) {
       try {
-        lokality = JSON.parse(evt.target.result);
+        const loaded = JSON.parse(evt.target.result);
+        lokality = zlúcDuplicity(loaded);
         aktualizujUI();
         document.getElementById('dataModal').style.display = 'none';
-        showToast("Celá databáza úspešne nahradená!", "success");
+        showToast("Celá databáza úspešne nahradená a prečistená od duplicít!", "success");
       } catch (err) {
         showToast("Chyba pri čítaní JSON súboru.", "error");
       }
@@ -1099,10 +1144,10 @@
       try {
         const loaded = JSON.parse(evt.target.result);
         if (Array.isArray(loaded)) {
-          lokality = lokality.concat(loaded);
+          lokality = zlúcDuplicity(lokality.concat(loaded));
           aktualizujUI();
           document.getElementById('dataModal').style.display = 'none';
-          showToast(`Pridaných ${loaded.length} záznamov k databáze!`, "success");
+          showToast(`Pridané záznamy a úspešne zlúčené prípadné duplicity!`, "success");
         }
       } catch (err) {
         showToast("Chyba pri čítaní JSON súboru.", "error");
@@ -1161,10 +1206,10 @@
           };
         });
 
-        lokality = lokality.concat(noveZaznamy);
+        lokality = zlúcDuplicity(lokality.concat(noveZaznamy));
         aktualizujUI();
         document.getElementById('dataModal').style.display = 'none';
-        showToast(`Načítaných ${noveZaznamy.length} záznamov zo súboru!`, "success");
+        showToast(`Súbor importovaný a duplicity boli úspešne zlúčené!`, "success");
       } catch (err) {
         showToast("Chyba pri spracovaní súboru.", "error");
       }
@@ -1192,7 +1237,7 @@
   function initApp() {
     const saved = localStorage.getItem("evidenciaEC_PSK");
     if (saved) {
-      try { lokality = JSON.parse(saved); } catch (e) { lokality = []; }
+      try { lokality = zlúcDuplicity(JSON.parse(saved)); } catch (e) { lokality = []; }
     }
     aktualizujUI();
   }
