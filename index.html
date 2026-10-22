@@ -943,11 +943,11 @@
     }
 
     try {
-      showToast('Načítavam a geokódujem dáta cez proxy...', 'info');
+      showToast('Načítavam dáta z Google Tabuľky...', 'info');
       
       const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(rawUrl);
       const resp = await fetch(proxyUrl);
-      if (!resp.ok) throw new Error('Chyba pri sťahovaní dát');
+      if (!resp.ok) throw new Error('Nepodarilo sa stiahnuť dáta');
 
       const csvText = await resp.text();
       const workbook = XLSX.read(csvText, { type: 'string' });
@@ -955,7 +955,7 @@
       const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
 
       if (!rows || rows.length === 0) {
-        showToast('Google Tabuľka neobsahuje žiadne dáta.', 'error');
+        showToast('Tabuľka neobsahuje žiadne dáta.', 'error');
         return;
       }
 
@@ -971,15 +971,11 @@
           'Názov', 
           'Name'
         ]);
-        if (!orgName && keys.length > 1) {
-          orgName = r[keys[1]];
-        }
+        if (!orgName && keys.length > 1) orgName = r[keys[1]];
         if (!orgName) continue;
 
         let adresaVal = getRowVal(r, ['Adresa', 'Adresa organizácie / Mesto', 'Adresa organizácie', 'Mesto', 'Polis', 'Sídlo']);
-        if (!adresaVal && keys.length > 3) {
-          adresaVal = r[keys[3]];
-        }
+        if (!adresaVal && keys.length > 3) adresaVal = r[keys[3]];
 
         const poznamkaVal = getRowVal(r, ['Poznámka alebo špecifické informácie', 'Poznámka', 'Poznamka', 'Poznámky']);
 
@@ -988,7 +984,7 @@
 
         const maEC = parseInt(getRowVal(r, ['Počet budov, ktoré MÁJÚ platný energetický certifikát: [ Zadať číslo ]', 'Počet budov S platným EC', 'S platným EC', 'Ma EC'])) || 0;
         const nemaEC = parseInt(getRowVal(r, ['Počet budov, ktoré NEMÁJÚ platný energetický certifikát: [ Zadať číslo ]', 'Počet budov BEZ platného EC', 'BEZ platného EC', 'Nema EC'])) || 0;
-        const celkovo = parseInt(getRowVal(r, ['Celkový počet budov vo vašej správe (ktoré spadajú pod zákonnú povinnosť):', 'Celkový počet budov v správe', 'Počet budov', 'Celkovo'])) || (maEC + nemaEC) || 1;
+        const celkovo = parseInt(getRowVal(r, ['Celkový počet budov vo vašej správe (ktoré spadają pod zákonnú povinnosť):', 'Celkový počet budov v správe', 'Počet budov', 'Celkovo'])) || (maEC + nemaEC) || 1;
 
         noveLokality.push({
           id: 'gs_' + Math.random().toString(36).substr(2, 9),
@@ -1014,14 +1010,14 @@
         ulozDoLocalStorage();
         aktualizujUI();
         document.getElementById('dataModal').style.display = 'none';
-        showToast(`Úspešne načítaných a zgeokódovaných ${noveLokality.length} záznamov!`, 'success');
+        showToast(`Úspešne načítaných ${noveLokality.length} záznamov!`, 'success');
       } else {
-        showToast('Nenašli sa žiadne platné záznamy v tabuľke.', 'error');
+        showToast('Nenašli sa žiadne platné riadky.', 'error');
       }
 
     } catch (err) {
       console.error(err);
-      showToast('Chyba pri načítavaní Google Tabuľky cez proxy.', 'error');
+      showToast('Chyba pri sťahovaní. Použite tlačidlo Import z Excelu.', 'error');
     }
   }
 
@@ -1079,7 +1075,7 @@
           ulozDoLocalStorage();
           aktualizujUI();
           document.getElementById('dataModal').style.display = 'none';
-          showToast(`Importovaných a zgeokódovaných ${importovane.length} záznamov.`, 'success');
+          showToast(`Importovaných ${importovane.length} záznamov.`, 'success');
         }
       } catch (err) {
         showToast('Chyba pri spracovaní súboru!', 'error');
