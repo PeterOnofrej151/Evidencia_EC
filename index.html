@@ -500,6 +500,32 @@
     'partial': L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-orange.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34] })
   };
 
+  // Databáza súradníc miest v Prešovskom kraji pre presné umiestnenie na mape podrobne
+  const mestoCoordinates = {
+    'prešov': [48.9984, 21.2393],
+    'poprad': [49.0595, 20.2977],
+    'kežmarok': [49.1353, 20.4283],
+    'humenné': [48.9370, 21.9163],
+    'bardejov': [49.2918, 21.2727],
+    'svidník': [49.3053, 21.5673],
+    'stropkov': [49.2021, 21.6521],
+    'vranov nad topľou': [48.8885, 21.6847],
+    'vranov': [48.8885, 21.6847],
+    'levoča': [49.0218, 20.5894],
+    'stará ľubovňa': [49.3013, 20.6888],
+    'ľubovňa': [49.3013, 20.6888],
+    'snina': [48.9876, 22.1501],
+    'medzilaborce': [49.2708, 21.9056],
+    'sabinov': [49.1025, 21.0981],
+    'giraltovce': [49.1128, 21.5173],
+    'vysoce tatry': [49.1381, 20.2185],
+    'smokovec': [49.1415, 20.2227],
+    'horný smokovec': [49.1415, 20.2227],
+    'batizovce': [49.0761, 20.1818],
+    'licartovce': [48.8778, 21.2403],
+    'legnava': [49.3361, 20.8358]
+  };
+
   function showToast(msg, type = 'info') {
     let bg = 'var(--primary-color)';
     if (type === 'success') bg = 'var(--accent-color)';
@@ -715,6 +741,45 @@
     return '';
   }
 
+  // Funkcia pre inteligentnú detekciu mesta a súradníc z názvu organizácie
+  function detegujMestoAAdresu(orgName, poznamkaVal) {
+    const text = (orgName + " " + poznamkaVal).toLowerCase();
+    
+    // Ak názov obsahuje ulicu a mesto oddelené čiarkou (napr. "Gymnázium, Konštantínova 1751/64, Stropkov")
+    if (orgName.includes(',')) {
+      const casti = orgName.split(',');
+      if (casti.length >= 2) {
+        const poslednaCast = casti[casti.length - 1].trim();
+        if (poslednaCast) {
+          const mKey = poslednaCast.toLowerCase();
+          if (mestoCoordinates[mKey]) {
+            return {
+              mesto: poslednaCast,
+              coords: [mestoCoordinates[mKey][0] + (Math.random() * 0.02 - 0.01), mestoCoordinates[mKey][1] + (Math.random() * 0.02 - 0.01)]
+            };
+          }
+        }
+      }
+    }
+
+    // Vyhľadávanie podľa kľúčových slov v texte
+    for (const [mestoKey, coords] of Object.entries(mestoCoordinates)) {
+      if (text.includes(mestoKey)) {
+        const velkymiMesto = mestoKey.charAt(0).toUpperCase() + mestoKey.slice(1);
+        return {
+          mesto: velkymiMesto,
+          coords: [coords[0] + (Math.random() * 0.02 - 0.01), coords[1] + (Math.random() * 0.02 - 0.01)]
+        };
+      }
+    }
+
+    // Výchozie hodnoty ak mesto nie je v názve
+    return {
+      mesto: 'Prešov',
+      coords: [48.9984 + (Math.random() * 0.06 - 0.03), 21.2393 + (Math.random() * 0.06 - 0.03)]
+    };
+  }
+
   async function fetchCsvWithCorsFallback(rawUrl) {
     let cleanUrl = rawUrl.trim();
     if (cleanUrl.includes('/edit')) {
@@ -783,22 +848,14 @@
         const poznamkaVal = getRowVal(row, ['Poznámka alebo špecifické informácie', 'Poznámka', 'poznamka']) || '';
         const ecVal = getRowVal(row, ['Číslo EC', 'cislo_ec']) || '';
 
-        let adresaVal = 'Prešov';
-        const fullText = (orgName + ' ' + poznamkaVal);
-        if (fullText.toLowerCase().includes('kežmarok')) adresaVal = 'Kežmarok';
-        else if (fullText.toLowerCase().includes('poprad')) adresaVal = 'Poprad';
-        else if (fullText.toLowerCase().includes('humenné')) adresaVal = 'Humenné';
-        else if (fullText.toLowerCase().includes('bardejov')) adresaVal = 'Bardejov';
-        else if (fullText.toLowerCase().includes('levoča')) adresaVal = 'Levoča';
-        else if (fullText.toLowerCase().includes('vranov')) adresaVal = 'Vranov nad Topľou';
-        else if (fullText.toLowerCase().includes('stropkov')) adresaVal = 'Stropkov';
-        else if (fullText.toLowerCase().includes('svidník')) adresaVal = 'Svidník';
+        // Automatické zistenie mesta a súradníc priamo z NÁZVU
+        const lokDetekcia = detegujMestoAAdresu(String(orgName), String(poznamkaVal));
 
         return {
           id: 'gform-' + Date.now() + '-' + idx,
           name: String(orgName).trim(),
           sektor: String(sektorVal).trim(),
-          polis: adresaVal,
+          polis: lokDetekcia.mesto,
           kontaktna_osoba: String(osobaVal).trim(),
           email: String(emailVal).trim(),
           telefon: String(telVal).trim(),
@@ -806,8 +863,8 @@
           pocet_ec_ma: isNaN(bMa) ? 0 : bMa,
           pocet_ec_nema: isNaN(bNema) ? 1 : bNema,
           cislo_ec: String(ecVal).trim(),
-          lat: 48.9984 + (Math.random() * 0.08 - 0.04),
-          lng: 21.2393 + (Math.random() * 0.08 - 0.04),
+          lat: lokDetekcia.coords[0],
+          lng: lokDetekcia.coords[1],
           poznamka: String(poznamkaVal).trim(),
           pdf_zoznam: [{
             nazov: 'Odpovede z formulára (Google Sheet)',
@@ -848,7 +905,7 @@
       const m = L.marker([l.lat, l.lng], { icon: markerIcons[key] }).addTo(mapa)
         .bindPopup(`<strong>${l.name}</strong><br>
                     <b>Sektor:</b> ${l.sektor || 'N/A'}<br>
-                    <b>Adresa:</b> ${l.polis || 'N/A'}<br>
+                    <b>Adresa / Mesto:</b> ${l.polis || 'N/A'}<br>
                     <b>Budovy:</b> spolu ${l.pocet_budov || 0} (EC: ${l.pocet_ec_ma || 0} / Bez: ${l.pocet_ec_nema || 0})<br>
                     <b>Číslo EC:</b> ${l.cislo_ec || 'Neuvedené'}<br>
                     ${pdfHtml}
@@ -1083,11 +1140,13 @@
           const poznamkaVal = getRowVal(row, ['Poznámka alebo špecifické informácie', 'Poznámka']) || '';
           const ecVal = getRowVal(row, ['Číslo EC']) || '';
 
+          const lokDetekcia = detegujMestoAAdresu(String(orgName), String(poznamkaVal));
+
           return {
             id: 'file-' + Date.now() + '-' + idx,
             name: String(orgName).trim(),
             sektor: String(sektorVal).trim(),
-            polis: 'Prešov',
+            polis: lokDetekcia.mesto,
             kontaktna_osoba: String(osobaVal).trim(),
             email: String(emailVal).trim(),
             telefon: String(telVal).trim(),
@@ -1095,8 +1154,8 @@
             pocet_ec_ma: isNaN(bMa) ? 0 : bMa,
             pocet_ec_nema: isNaN(bNema) ? 1 : bNema,
             cislo_ec: String(ecVal).trim(),
-            lat: 48.9984 + (Math.random() * 0.08 - 0.04),
-            lng: 21.2393 + (Math.random() * 0.08 - 0.04),
+            lat: lokDetekcia.coords[0],
+            lng: lokDetekcia.coords[1],
             poznamka: String(poznamkaVal).trim(),
             pdf_zoznam: []
           };
