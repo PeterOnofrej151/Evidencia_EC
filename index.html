@@ -717,7 +717,6 @@
 
   const delay = ms => new Promise(res => setTimeout(res, ms));
 
-  // Asynchrónne geokódovanie adresy cez Nominatim API s ošetrením
   async function detegujMestoAAdresu(orgName = '', poznamkaVal = '', adresaVal = '') {
     let queryToSearch = '';
 
@@ -944,16 +943,16 @@
     }
 
     try {
-      showToast('Načítavam a geokódujem dáta z Google Tabuľky...', 'info');
+      showToast('Načítavam a geokódujem dáta cez proxy...', 'info');
       
-      // Použitie CORS proxy, aby prehliadač nezablokoval požiadavku
-      const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(rawUrl);
+      const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(rawUrl);
       const resp = await fetch(proxyUrl);
+      if (!resp.ok) throw new Error('Chyba pri sťahovaní dát');
+
       const csvText = await resp.text();
-      
       const workbook = XLSX.read(csvText, { type: 'string' });
       const sheetName = workbook.SheetNames[0];
-      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
 
       if (!rows || rows.length === 0) {
         showToast('Google Tabuľka neobsahuje žiadne dáta.', 'error');
@@ -962,7 +961,8 @@
 
       let noveLokality = [];
       for (const r of rows) {
-        // Flexibilné vyhľadanie názvu organizácie
+        const keys = Object.keys(r);
+        
         let orgName = getRowVal(r, [
           '2. Názov organizácie (OvZP PSK)', 
           'Názov organizácie (OvZP PSK)', 
@@ -971,17 +971,18 @@
           'Názov', 
           'Name'
         ]);
-
-        if (!orgName) {
-          const keys = Object.keys(r);
-          if (keys.length > 1) orgName = r[keys[1]] || r[keys[0]];
+        if (!orgName && keys.length > 1) {
+          orgName = r[keys[1]];
         }
         if (!orgName) continue;
 
-        const adresaVal = getRowVal(r, ['Adresa', 'Adresa organizácie / Mesto', 'Adresa organizácie', 'Mesto', 'Polis', 'Sídlo']);
+        let adresaVal = getRowVal(r, ['Adresa', 'Adresa organizácie / Mesto', 'Adresa organizácie', 'Mesto', 'Polis', 'Sídlo']);
+        if (!adresaVal && keys.length > 3) {
+          adresaVal = r[keys[3]];
+        }
+
         const poznamkaVal = getRowVal(r, ['Poznámka alebo špecifické informácie', 'Poznámka', 'Poznamka', 'Poznámky']);
 
-        // Volanie geokódovania s malou pauzou (aby nedošlo k zablokovaniu API)
         const detekcia = await detegujMestoAAdresu(orgName, poznamkaVal, adresaVal);
         await delay(350); 
 
@@ -1020,7 +1021,7 @@
 
     } catch (err) {
       console.error(err);
-      showToast('Chyba pri načítavaní Google Tabuľky.', 'error');
+      showToast('Chyba pri načítavaní Google Tabuľky cez proxy.', 'error');
     }
   }
 
@@ -1034,14 +1035,18 @@
         const data = evt.target.result;
         const workbook = XLSX.read(data, { type: 'binary' });
         const sheetName = workbook.SheetNames[0];
-        const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+        const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
 
         let importovane = [];
         for (const r of rows) {
-          const orgName = getRowVal(r, ['2. Názov organizácie (OvZP PSK)', 'Názov organizácie', 'Organizácia', 'Názov']);
+          const keys = Object.keys(r);
+          let orgName = getRowVal(r, ['2. Názov organizácie (OvZP PSK)', 'Názov organizácie', 'Organizácia', 'Názov']);
+          if (!orgName && keys.length > 1) orgName = r[keys[1]];
           if (!orgName) continue;
 
-          const adresaVal = getRowVal(r, ['Adresa', 'Adresa organizácie / Mesto', 'Adresa organizácie', 'Mesto', 'Polis']);
+          let adresaVal = getRowVal(r, ['Adresa', 'Adresa organizácie / Mesto', 'Adresa organizácie', 'Mesto', 'Polis']);
+          if (!adresaVal && keys.length > 3) adresaVal = r[keys[3]];
+
           const poznamkaVal = getRowVal(r, ['Poznámka alebo špecifické informácie', 'Poznámka', 'Poznamka']);
 
           const detekcia = await detegujMestoAAdresu(orgName, poznamkaVal, adresaVal);
