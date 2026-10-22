@@ -704,7 +704,6 @@
     }
   }
 
-  // Bezpečné vyhľadanie stĺpca bez ohľadu na medzery
   function getRowVal(row, possibleKeys) {
     const keys = Object.keys(row);
     for (const pk of possibleKeys) {
@@ -716,7 +715,6 @@
     return '';
   }
 
-  // Bezpečný fetch s podporou CORS proxy
   async function fetchCsvWithCorsFallback(rawUrl) {
     let cleanUrl = rawUrl.trim();
     if (cleanUrl.includes('/edit')) {
