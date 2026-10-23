@@ -666,11 +666,13 @@
     }
   }
 
+  // Robustná funkcia, ktorá ignoruje medzery a špeciálne znaky v názvoch stĺpcov
   function getRowVal(row, possibleKeys) {
     const keys = Object.keys(row);
     for (const pk of possibleKeys) {
-      const foundKey = keys.find(k => k.trim().toLowerCase() === pk.trim().toLowerCase());
-      if (foundKey !== undefined && row[foundKey] !== undefined && row[foundKey] !== null) {
+      const cleanPk = pk.trim().toLowerCase();
+      const foundKey = keys.find(k => k.trim().toLowerCase() === cleanPk);
+      if (foundKey !== undefined && row[foundKey] !== undefined && row[foundKey] !== null && row[foundKey] !== '') {
         return row[foundKey];
       }
     }
@@ -883,7 +885,6 @@
     document.getElementById('editModal').style.display = 'none';
   };
 
-  // Načítanie celého JSON súboru so zálohou
   document.getElementById('jsonReplaceInput').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -907,7 +908,7 @@
     reader.readAsText(file);
   });
 
-  // Spoľahlivý import z Excelu / CSV súboru s podporou záložných stĺpcov podľa poradia
+  // Extrémne robustný import z Excelu / CSV s automatickou detekciou stĺpcov podľa poradia aj názvov
   document.getElementById('fileInput').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -929,22 +930,24 @@
         for (const r of rows) {
           const keys = Object.keys(r);
           
-          // Názov organizácie (skúsi nájsť známy názov stĺpca, inak vezme druhý stĺpec)
+          // Názov organizácie (skúsi nájsť kľúč, ak nie je, vezme stĺpec pod indexom 2)
           let orgName = getRowVal(r, ['2. Názov organizácie (OvZP PSK)', 'Názov organizácie', 'Organizácia', 'Názov', 'Name']);
+          if (!orgName && keys.length > 2) orgName = r[keys[2]];
           if (!orgName && keys.length > 1) orgName = r[keys[1]];
           if (!orgName) continue;
 
-          // Adresa (skúsi nájsť známy názov stĺpca, inak vezme štvrtý stĺpec)
+          // Adresa (skúsi nájsť kľúč, ak nie je, vezme stĺpec pod indexom 3)
           let adresaVal = getRowVal(r, ['Adresa', 'Adresa organizácie / Mesto', 'Adresa organizácie', 'Mesto', 'Polis', 'Sídlo']);
           if (!adresaVal && keys.length > 3) adresaVal = r[keys[3]];
 
           const poznamkaVal = getRowVal(r, ['Poznámka alebo špecifické informácie', 'Poznámka', 'Poznamka', 'Poznámky']);
 
           const detekcia = await detegujMestoAAdresu(orgName, poznamkaVal, adresaVal);
-          await delay(350);
+          await delay(250);
 
           const maEC = parseInt(getRowVal(r, ['Počet budov, ktoré MÁJÚ platný energetický certifikát: [ Zadať číslo ]', 'Počet budov S platným EC', 'S platným EC', 'Ma EC'])) || 0;
           const nemaEC = parseInt(getRowVal(r, ['Počet budov, ktoré NEMÁJÚ platný energetický certifikát: [ Zadať číslo ]', 'Počet budov BEZ platného EC', 'BEZ platného EC', 'Nema EC'])) || 0;
+          const celkovo = parseInt(getRowVal(r, ['Celkový počet budov vo vašej správe (ktoré spadajú pod zákonnú povinnosť):', 'Celkový počet budov v správe', 'Počet budov', 'Celkovo'])) || (maEC + nemaEC) || 1;
 
           importovane.push({
             id: 'imp_' + Math.random().toString(36).substr(2, 9),
@@ -955,7 +958,7 @@
             email: getRowVal(r, ['5. E-mailová adresa', 'E-mailová adresa', 'Email', 'E-mail']),
             telefon: getRowVal(r, ['6. Telefonický kontakt', 'Telefonický kontakt', 'Telefon', 'Telefón', 'Tel']),
             cislo_ec: getRowVal(r, ['Číslo EC', 'Cislo EC', 'EC']),
-            pocet_budov: parseInt(getRowVal(r, ['Celkový počet budov vo vašej správe (ktoré spadajú pod zákonnú povinnosť):', 'Celkový počet budov v správe', 'Počet budov', 'Celkovo'])) || (maEC + nemaEC) || 1,
+            pocet_budov: celkovo,
             pocet_ec_ma: maEC,
             pocet_ec_nema: nemaEC,
             lat: parseFloat(getRowVal(r, ['Lat', 'Šírka'])) || detekcia.coords[0],
@@ -970,7 +973,7 @@
           ulozDoLocalStorage();
           aktualizujUI();
           document.getElementById('dataModal').style.display = 'none';
-          showToast(`Úspešne importovaných ${importovane.length} záznamov.`, 'success');
+          showToast(`Úspešne importovaných ${importovane.length} záznamov!`, 'success');
         } else {
           showToast('Nenašli sa žiadne platné riadky v súbore.', 'error');
         }
