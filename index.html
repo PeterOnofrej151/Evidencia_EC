@@ -488,7 +488,6 @@
     'partial': L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-orange.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34] })
   };
 
-  // Rozšírená databáza súradníc miest a obcí Prešovského kraja
   const townCoords = {
     'presov': [49.0019, 21.2398],
     'poprad': [49.0558, 20.2915],
@@ -530,7 +529,6 @@
       .trim();
   }
 
-  // Záložné lokálne určenie súradníc
   function getFallbackCoords(addr) {
     const clean = normalizeAddrText(addr);
     for (let town in townCoords) {
@@ -543,7 +541,6 @@
     return [49.0019 + (Math.random() - 0.5) * 0.04, 21.2398 + (Math.random() - 0.5) * 0.04];
   }
 
-  // Reálne presné geokódovanie cez OpenStreetMap Nominatim API
   async function geocodeAddressOnline(address) {
     if (!address || address.trim().length < 3) return null;
     try {
@@ -824,15 +821,26 @@
         pdfHtml += '</div>';
       }
 
-      const m = L.marker([l.lat, l.lng], { icon: markerIcons[key] }).addTo(mapa)
+      // Vytvorenie značky na mape s možnosťou manuálneho posunu (draggable)
+      const m = L.marker([l.lat, l.lng], { icon: markerIcons[key], draggable: true }).addTo(mapa)
         .bindPopup(`<strong>${l.name}</strong><br>
                     <b>Sektor:</b> ${l.sektor || 'N/A'}<br>
                     <b>Adresa:</b> ${l.polis || 'N/A'}<br>
+                    <b>GPS:</b> ${l.lat.toFixed(5)}, ${l.lng.toFixed(5)}<br>
                     <b>Budovy:</b> spolu ${l.pocet_budov || 0} (EC: ${l.pocet_ec_ma || 0} / Bez: ${l.pocet_ec_nema || 0})<br>
                     <b>Číslo EC:</b> ${l.cislo_ec || 'Neuvedené'}<br>
                     ${pdfHtml}
                     <button onclick="upravZaznamPodlaId('${l.id}')" style="margin-top:8px; background:var(--primary-color); color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;"><i class="fas fa-edit"></i> Upraviť</button>`);
       
+      // Aktualizácia súradníc po drag and drop posune značky na mape
+      m.on('dragend', function(e) {
+        const pos = e.target.getLatLng();
+        l.lat = pos.lat;
+        l.lng = pos.lng;
+        aktualizujUI();
+        showToast(`Presná poloha aktualizovaná pre: ${l.name}`, "success");
+      });
+
       m.on('popupopen', () => {
         if (l.pdf_zoznam) {
           l.pdf_zoznam.forEach((p, idx) => {
@@ -872,7 +880,7 @@
       const el = document.createElement('div');
       el.className = 'lokalita';
       el.onclick = () => {
-        mapa.setView([l.lat, l.lng], 15);
+        mapa.setView([l.lat, l.lng], 16);
         if (markerMap[l.id]) markerMap[l.id].openPopup();
       };
       
@@ -1002,7 +1010,7 @@
           return;
         }
 
-        showToast("Spracovávam dáta a určujem GPS súradnice...", "info");
+        showToast("Nahrávam dáta a spájam GPS súradnice zo stĺpcov N a O...", "info");
 
         const importedPromises = jsonRows.map(async (row, index) => {
           const findKey = (keywords) => {
@@ -1027,10 +1035,24 @@
           const cisloEcVal = row['Číslo EC'] || '';
           const poznamkaVal = row['Poznámka alebo špecifické informácie '] || '';
 
-          // 1. Skúsime presné geokódovanie online, ak zlyhá, použijeme vylepšenú databázu obcí
-          let coords = await geocodeAddressOnline(adresaOrg);
-          if (!coords) {
-            coords = getFallbackCoords(adresaOrg);
+          // NAČÍTANIE GPS ZO STĹPCOV N A O (GPS - Šírka (Latitude) / GPS - Dĺžka (Longitude))
+          let rawLat = row['GPS - Šírka (Latitude)'] || row['GPS - Šírka'] || row['Latitude'] || row['Lat'] || findKey(['šírka', 'latitude']);
+          let rawLng = row['GPS - Dĺžka (Longitude)'] || row['GPS - Dĺžka'] || row['Longitude'] || row['Lng'] || findKey(['dĺžka', 'longitude']);
+
+          let parsedLat = parseFloat(String(rawLat).replace(',', '.'));
+          let parsedLng = parseFloat(String(rawLng).replace(',', '.'));
+
+          let coords = null;
+
+          // 1. Ak existuje hodnota v stĺpcoch N a O, použije sa 100% presné GPS z Excelu
+          if (!isNaN(parsedLat) && !isNaN(parsedLng) && parsedLat !== 0 && parsedLng !== 0) {
+            coords = [parsedLat, parsedLng];
+          } else {
+            // 2. Záložné geokódovanie online, ak GPS v Exceli chýba
+            coords = await geocodeAddressOnline(adresaOrg);
+            if (!coords) {
+              coords = getFallbackCoords(adresaOrg);
+            }
           }
 
           return {
@@ -1059,7 +1081,7 @@
 
         aktualizujUI();
         document.getElementById('dataModal').style.display = 'none';
-        showToast(`Úspešne spracované! Zlúčené duplicity: ${zlucenie.pocetOdstranenych}`, "success");
+        showToast(`Úspešne spracované s GPS zo stĺpcov N a O! Zlúčené duplicity: ${zlucenie.pocetOdstranenych}`, "success");
       } catch (err) {
         console.error(err);
         showToast("Chyba pri spracovaní Excel súboru.", "error");
