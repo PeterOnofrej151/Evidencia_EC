@@ -785,7 +785,7 @@
       };
       reader.readAsDataURL(file);
     });
-    this.value = ''; // reset inputu
+    this.value = '';
   });
 
   function zobrazMapu() {
@@ -921,52 +921,59 @@
 
   document.getElementById('editForm').onsubmit = async (e) => {
     e.preventDefault();
-    const realIdx = parseInt(document.getElementById('editIndex').value);
-    
-    const pdfZoznam = [];
-    document.querySelectorAll('#pdfContainer .pdf-row').forEach(row => {
-      const nazov = row.querySelector('.pdf-nazov').value.trim();
-      const hiddenData = row.querySelector('.pdf-data');
-      const dataVal = hiddenData ? hiddenData.value : '';
+    try {
+      const realIdx = parseInt(document.getElementById('editIndex').value);
+      
+      const pdfZoznam = [];
+      document.querySelectorAll('#pdfContainer .pdf-row').forEach(row => {
+        const nazovInput = row.querySelector('.pdf-nazov');
+        const hiddenDataInput = row.querySelector('.pdf-data');
+        
+        const nazov = nazovInput ? nazovInput.value.trim() : '';
+        const dataVal = hiddenDataInput ? hiddenDataInput.value : '';
 
-      if (dataVal || nazov) {
-        pdfZoznam.push({
-          nazov: nazov || 'Certifikát',
-          data: dataVal
-        });
+        if (dataVal || nazov) {
+          pdfZoznam.push({
+            nazov: nazov || 'Certifikát',
+            data: dataVal
+          });
+        }
+      });
+
+      const recordData = {
+        id: document.getElementById('editId').value || ('ec-' + Date.now()),
+        name: document.getElementById('editName').value.trim(),
+        sektor: document.getElementById('editSektor').value,
+        polis: document.getElementById('editPolis').value.trim(),
+        kontaktna_osoba: document.getElementById('editOsoba').value.trim(),
+        email: document.getElementById('editEmail').value.trim(),
+        telefon: document.getElementById('editTelefon').value.trim(),
+        pocet_budov: parseInt(document.getElementById('editPocetBudov').value) || 0,
+        pocet_ec_ma: parseInt(document.getElementById('editPocetMa').value) || 0,
+        pocet_ec_nema: parseInt(document.getElementById('editPocetNema').value) || 0,
+        cislo_ec: document.getElementById('editCisloEC').value.trim(),
+        lat: parseFloat(document.getElementById('editLat').value) || 48.9984,
+        lng: parseFloat(document.getElementById('editLng').value) || 21.2393,
+        poznamka: document.getElementById('editPoznamka').value.trim(),
+        pdf_zoznam: pdfZoznam
+      };
+
+      if (isNaN(realIdx) || realIdx === -1 || realIdx >= lokality.length) {
+        lokality.push(recordData);
+      } else {
+        lokality[realIdx] = recordData;
       }
-    });
 
-    const recordData = {
-      id: document.getElementById('editId').value || ('ec-' + Date.now()),
-      name: document.getElementById('editName').value.trim(),
-      sektor: document.getElementById('editSektor').value,
-      polis: document.getElementById('editPolis').value.trim(),
-      kontaktna_osoba: document.getElementById('editOsoba').value.trim(),
-      email: document.getElementById('editEmail').value.trim(),
-      telefon: document.getElementById('editTelefon').value.trim(),
-      pocet_budov: parseInt(document.getElementById('editPocetBudov').value) || 0,
-      pocet_ec_ma: parseInt(document.getElementById('editPocetMa').value) || 0,
-      pocet_ec_nema: parseInt(document.getElementById('editPocetNema').value) || 0,
-      cislo_ec: document.getElementById('editCisloEC').value.trim(),
-      lat: parseFloat(document.getElementById('editLat').value) || 48.9984,
-      lng: parseFloat(document.getElementById('editLng').value) || 21.2393,
-      poznamka: document.getElementById('editPoznamka').value.trim(),
-      pdf_zoznam: pdfZoznam
-    };
+      const zlucenie = zlucDuplicity(lokality);
+      lokality = zlucenie.zluceneData;
 
-    if (isNaN(realIdx) || realIdx === -1 || realIdx >= lokality.length) {
-      lokality.push(recordData);
-    } else {
-      lokality[realIdx] = recordData;
+      aktualizujUI();
+      document.getElementById('editModal').style.display = 'none';
+      showToast("Záznam úspešne uložený!", "success");
+    } catch (err) {
+      console.error(err);
+      showToast("Chyba pri ukladaní záznamu.", "error");
     }
-
-    const zlucenie = zlucDuplicity(lokality);
-    lokality = zlucenie.zluceneData;
-
-    aktualizujUI();
-    document.getElementById('editModal').style.display = 'none';
-    showToast("Záznam úspešne uložený!", "success");
   };
 
   document.getElementById('fileInput').addEventListener('change', (e) => {
