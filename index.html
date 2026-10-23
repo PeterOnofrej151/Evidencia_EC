@@ -370,12 +370,12 @@
   <div class="modal-content">
     <span class="close-button" id="closeEditModal">&times;</span>
     <h2 id="modalTitle">Správa záznamu EC budovy</h2>
-    <form id="editForm">
+    <div>
       <input type="hidden" id="editIndex" />
       <input type="hidden" id="editId" />
       
       <label for="editName">Názov organizácie (OvZP PSK):</label>
-      <input type="text" id="editName" required />
+      <input type="text" id="editName" placeholder="Zadajte názov organizácie" />
 
       <div class="filter-grid">
         <div>
@@ -390,7 +390,7 @@
 
         <div>
           <label for="editPolis">Adresa organizácie / Mesto:</label>
-          <input type="text" id="editPolis" placeholder="Napr. Hlavná 20, Prešov" required />
+          <input type="text" id="editPolis" placeholder="Napr. Hlavná 20, Prešov" />
         </div>
       </div>
 
@@ -435,11 +435,11 @@
         <div class="filter-grid">
           <div>
             <label for="editLat">Šírka (Lat):</label>
-            <input type="number" id="editLat" step="any" required />
+            <input type="number" id="editLat" step="any" />
           </div>
           <div>
             <label for="editLng">Dĺžka (Lng):</label>
-            <input type="number" id="editLng" step="any" required />
+            <input type="number" id="editLng" step="any" />
           </div>
         </div>
       </div>
@@ -459,8 +459,11 @@
         <div id="pdfContainer" style="max-height: 250px; overflow-y: auto;"></div>
       </div>
 
-      <button type="submit" class="btn" style="width:100%; margin-top:5px;"><i class="fas fa-save"></i> Uložiť záznam</button>
-    </form>
+      <div style="display:flex; gap:10px; margin-top:15px;">
+        <button type="button" class="btn" style="flex:1; margin:0;" onclick="ulozZaznamManulne()"><i class="fas fa-save"></i> Uložiť záznam</button>
+        <button type="button" class="btn btn-secondary" style="margin:0;" onclick="document.getElementById('editModal').style.display='none'">Zrušiť</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -740,9 +743,19 @@
   function otvorNovyZaznamModal() {
     document.getElementById('editIndex').value = '-1';
     document.getElementById('editId').value = '';
-    document.getElementById('editForm').reset();
+    document.getElementById('editName').value = '';
+    document.getElementById('editSektor').value = 'Kultúra';
+    document.getElementById('editPolis').value = '';
+    document.getElementById('editOsoba').value = '';
+    document.getElementById('editEmail').value = '';
+    document.getElementById('editTelefon').value = '';
+    document.getElementById('editPocetBudov').value = '1';
+    document.getElementById('editPocetMa').value = '0';
+    document.getElementById('editPocetNema').value = '1';
+    document.getElementById('editCisloEC').value = '';
     document.getElementById('editLat').value = '48.9984';
     document.getElementById('editLng').value = '21.2393';
+    document.getElementById('editPoznamka').value = '';
     document.getElementById('pdfContainer').innerHTML = '';
     document.getElementById('editModal').style.display = 'block';
   }
@@ -754,7 +767,7 @@
 
     div.innerHTML = `
       <div style="display:flex; gap:8px; align-items:center;">
-        <input type="text" placeholder="Názov certifikátu" value="${nazov}" style="flex:1; margin-bottom:0;" class="pdf-nazov" />
+        <input type="text" placeholder="Názov certifikátu (napr. certifikat.pdf)" value="${nazov}" style="flex:1; margin-bottom:0;" class="pdf-nazov" />
         <input type="hidden" class="pdf-data" value="${dataVal}" />
         <button type="button" class="btn btn-info open-pdf-btn" style="padding:6px 10px; font-size:12px; margin:0;"><i class="fas fa-eye"></i> Otvoriť</button>
         <button type="button" class="btn btn-danger" style="padding:6px 10px; font-size:12px; margin:0;" onclick="this.closest('.pdf-row').remove()"><i class="fas fa-trash"></i></button>
@@ -779,7 +792,7 @@
       const reader = new FileReader();
       reader.onload = function(evt) {
         const base64Data = evt.target.result;
-        const cleanName = file.name.replace(/\.[^/.]+$/, "");
+        const cleanName = file.name;
         pridajPdfRiadok(cleanName, base64Data);
         showToast(`Úspešne pridaný certifikát: ${file.name}`, 'success');
       };
@@ -787,6 +800,74 @@
     });
     this.value = '';
   });
+
+  function ulozZaznamManulne() {
+    try {
+      const nameVal = document.getElementById('editName').value.trim();
+      const polisVal = document.getElementById('editPolis').value.trim();
+
+      if (!nameVal) {
+        showToast("Prosím, vyplňte Názov organizácie.", "error");
+        return;
+      }
+      if (!polisVal) {
+        showToast("Prosím, vyplňte Adresu organizácie.", "error");
+        return;
+      }
+
+      const realIdx = parseInt(document.getElementById('editIndex').value);
+      
+      const pdfZoznam = [];
+      document.querySelectorAll('#pdfContainer .pdf-row').forEach(row => {
+        const nazovInput = row.querySelector('.pdf-nazov');
+        const hiddenDataInput = row.querySelector('.pdf-data');
+        
+        const nazov = nazovInput ? nazovInput.value.trim() : '';
+        const dataVal = hiddenDataInput ? hiddenDataInput.value : '';
+
+        if (dataVal || nazov) {
+          pdfZoznam.push({
+            nazov: nazov || 'Certifikát.pdf',
+            data: dataVal
+          });
+        }
+      });
+
+      const recordData = {
+        id: document.getElementById('editId').value || ('ec-' + Date.now()),
+        name: nameVal,
+        sektor: document.getElementById('editSektor').value,
+        polis: polisVal,
+        kontaktna_osoba: document.getElementById('editOsoba').value.trim(),
+        email: document.getElementById('editEmail').value.trim(),
+        telefon: document.getElementById('editTelefon').value.trim(),
+        pocet_budov: parseInt(document.getElementById('editPocetBudov').value) || 0,
+        pocet_ec_ma: parseInt(document.getElementById('editPocetMa').value) || 0,
+        pocet_ec_nema: parseInt(document.getElementById('editPocetNema').value) || 0,
+        cislo_ec: document.getElementById('editCisloEC').value.trim(),
+        lat: parseFloat(document.getElementById('editLat').value) || 48.9984,
+        lng: parseFloat(document.getElementById('editLng').value) || 21.2393,
+        poznamka: document.getElementById('editPoznamka').value.trim(),
+        pdf_zoznam: pdfZoznam
+      };
+
+      if (isNaN(realIdx) || realIdx === -1 || realIdx >= lokality.length) {
+        lokality.push(recordData);
+      } else {
+        lokality[realIdx] = recordData;
+      }
+
+      const zlucenie = zlucDuplicity(lokality);
+      lokality = zlucenie.zluceneData;
+
+      aktualizujUI();
+      document.getElementById('editModal').style.display = 'none';
+      showToast("Záznam úspešne uložený!", "success");
+    } catch (err) {
+      console.error(err);
+      showToast("Chyba pri ukladaní záznamu.", "error");
+    }
+  }
 
   function zobrazMapu() {
     markerMap = {};
@@ -796,9 +877,9 @@
       const key = getStatusKey(l);
       let pdfHtml = '';
       if (l.pdf_zoznam && l.pdf_zoznam.length > 0) {
-        pdfHtml = '<div style="margin-top:6px; font-size:11px;"><b>PDF certifikáty:</b><br>';
+        pdfHtml = '<div style="margin-top:8px; font-size:12px; border-top:1px solid #ddd; padding-top:6px;"><b><i class="fas fa-file-pdf" style="color:var(--danger-color);"></i> Priložené PDF súbory:</b><br>';
         l.pdf_zoznam.forEach((p, idx) => {
-          pdfHtml += `<div style="margin-top:2px;"><a href="#" id="map-pdf-${l.id}-${idx}" style="color:var(--danger-color); font-weight:500;"><i class="fas fa-file-pdf"></i> ${p.nazov || 'Certifikát'}</a></div>`;
+          pdfHtml += `<div style="margin-top:3px;"><a href="#" id="map-pdf-${l.id}-${idx}" style="color:var(--primary-color); font-weight:600; text-decoration:none;"><i class="fas fa-file-pdf" style="color:var(--danger-color); margin-right:4px;"></i> ${p.nazov || 'Certifikát.pdf'}</a></div>`;
         });
         pdfHtml += '</div>';
       }
@@ -918,63 +999,6 @@
   }
 
   document.getElementById('closeEditModal').onclick = () => document.getElementById('editModal').style.display = 'none';
-
-  document.getElementById('editForm').onsubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const realIdx = parseInt(document.getElementById('editIndex').value);
-      
-      const pdfZoznam = [];
-      document.querySelectorAll('#pdfContainer .pdf-row').forEach(row => {
-        const nazovInput = row.querySelector('.pdf-nazov');
-        const hiddenDataInput = row.querySelector('.pdf-data');
-        
-        const nazov = nazovInput ? nazovInput.value.trim() : '';
-        const dataVal = hiddenDataInput ? hiddenDataInput.value : '';
-
-        if (dataVal || nazov) {
-          pdfZoznam.push({
-            nazov: nazov || 'Certifikát',
-            data: dataVal
-          });
-        }
-      });
-
-      const recordData = {
-        id: document.getElementById('editId').value || ('ec-' + Date.now()),
-        name: document.getElementById('editName').value.trim(),
-        sektor: document.getElementById('editSektor').value,
-        polis: document.getElementById('editPolis').value.trim(),
-        kontaktna_osoba: document.getElementById('editOsoba').value.trim(),
-        email: document.getElementById('editEmail').value.trim(),
-        telefon: document.getElementById('editTelefon').value.trim(),
-        pocet_budov: parseInt(document.getElementById('editPocetBudov').value) || 0,
-        pocet_ec_ma: parseInt(document.getElementById('editPocetMa').value) || 0,
-        pocet_ec_nema: parseInt(document.getElementById('editPocetNema').value) || 0,
-        cislo_ec: document.getElementById('editCisloEC').value.trim(),
-        lat: parseFloat(document.getElementById('editLat').value) || 48.9984,
-        lng: parseFloat(document.getElementById('editLng').value) || 21.2393,
-        poznamka: document.getElementById('editPoznamka').value.trim(),
-        pdf_zoznam: pdfZoznam
-      };
-
-      if (isNaN(realIdx) || realIdx === -1 || realIdx >= lokality.length) {
-        lokality.push(recordData);
-      } else {
-        lokality[realIdx] = recordData;
-      }
-
-      const zlucenie = zlucDuplicity(lokality);
-      lokality = zlucenie.zluceneData;
-
-      aktualizujUI();
-      document.getElementById('editModal').style.display = 'none';
-      showToast("Záznam úspešne uložený!", "success");
-    } catch (err) {
-      console.error(err);
-      showToast("Chyba pri ukladaní záznamu.", "error");
-    }
-  };
 
   document.getElementById('fileInput').addEventListener('change', (e) => {
     const file = e.target.files[0];
