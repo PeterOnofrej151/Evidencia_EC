@@ -447,13 +447,13 @@
       <label for="editPoznamka">Poznámka / Špecifické informácie:</label>
       <textarea id="editPoznamka" placeholder="Vložte poznámky, zoznam budov..."></textarea>
 
-      <!-- Sekcia pre výber PDF, lokálnu cestu a otváranie súboru -->
+      <!-- Sekcia pre výber PDF a otváranie súboru -->
       <div style="background: #f8f9fa; border: 1px solid var(--border-color); padding: 12px; border-radius: 6px; margin-bottom: 12px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-          <label style="margin:0;"><i class="fas fa-file-pdf" style="color:var(--danger-color);"></i> PDF Certifikáty & Lokálna cesta:</label>
+          <label style="margin:0;"><i class="fas fa-file-pdf" style="color:var(--danger-color);"></i> PDF Certifikáty (uložené v aplikácii):</label>
           <div style="display:flex; gap:6px;">
-            <button type="button" class="btn btn-secondary" style="padding:4px 10px; font-size:12px; margin:0;" onclick="pridajPdfRiadok()"><i class="fas fa-plus"></i> Pridať riadok</button>
-            <button type="button" class="btn btn-info" style="padding:4px 10px; font-size:12px; margin:0;" onclick="vyberPdfZDisku()"><i class="fas fa-folder-open"></i> Súbor z PC</button>
+            <button type="button" class="btn btn-secondary" style="padding:4px 10px; font-size:12px; margin:0;" onclick="pridajPdfRiadok()"><i class="fas fa-plus"></i> Prázdny riadok</button>
+            <label class="btn btn-info" style="padding:4px 10px; font-size:12px; margin:0; cursor:pointer;"><i class="fas fa-folder-open"></i> Súbor z PC <input type="file" id="pdfFileInput" accept=".pdf" multiple style="display:none;" /></label>
           </div>
         </div>
         <div id="pdfContainer" style="max-height: 250px; overflow-y: auto;"></div>
@@ -603,7 +603,7 @@
         if (item.pdf_zoznam && item.pdf_zoznam.length > 0) {
           if (!target.pdf_zoznam) target.pdf_zoznam = [];
           item.pdf_zoznam.forEach(pdf => {
-            const uzExiste = target.pdf_zoznam.some(p => p.nazov === pdf.nazov || (p.data && pdf.data && p.data === pdf.data) || (p.cesta && pdf.cesta && p.cesta === pdf.cesta));
+            const uzExiste = target.pdf_zoznam.some(p => p.nazov === pdf.nazov || (p.data && pdf.data && p.data === pdf.data));
             if (!uzExiste) {
               target.pdf_zoznam.push(pdf);
             }
@@ -691,28 +691,24 @@
     aktualizujUI();
   }
 
-  function otvorPdfSubor(target) {
-    if (!target) return;
+  function otvorPdfSubor(base64Data) {
+    if (!base64Data) {
+      showToast("Tento záznam nemá vložený žiadny PDF súbor.", "warning");
+      return;
+    }
 
-    if (target.startsWith('data:')) {
-      try {
-        const arr = target.split(',');
-        const mime = arr[0].match(/:(.*?);/)[1] || 'application/pdf';
-        const bstr = atob(arr[1]);
-        let n = bstr.length;
-        const u8arr = new Uint8Array(n);
-        while (n--) { u8arr[n] = bstr.charCodeAt(n); }
-        const blob = new Blob([u8arr], { type: mime });
-        const blobUrl = URL.createObjectURL(blob);
-        window.open(blobUrl, '_blank');
-      } catch (err) {
-        window.open(target, '_blank');
-      }
-    } else if (target.match(/^[a-zA-Z]:\\/) || target.startsWith('\\\\')) {
-      const fileUrl = 'file:///' + target.replace(/\\/g, '/');
-      window.open(fileUrl, '_blank');
-    } else {
-      window.open(target, '_blank');
+    try {
+      const arr = base64Data.split(',');
+      const mime = arr[0].match(/:(.*?);/)[1] || 'application/pdf';
+      const bstr = atob(arr[1]);
+      let n = bstr.length;
+      const u8arr = new Uint8Array(n);
+      while (n--) { u8arr[n] = bstr.charCodeAt(n); }
+      const blob = new Blob([u8arr], { type: mime });
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank');
+    } catch (err) {
+      showToast("Nepodarilo sa otvoriť PDF súbor.", "error");
     }
   }
 
@@ -751,60 +747,46 @@
     document.getElementById('editModal').style.display = 'block';
   }
 
-  function pridajPdfRiadok(nazov = '', dataVal = '', cestaVal = '') {
+  function pridajPdfRiadok(nazov = '', dataVal = '') {
     const container = document.getElementById('pdfContainer');
     const div = document.createElement('div');
     div.className = 'pdf-row';
 
     div.innerHTML = `
-      <div style="display:flex; gap:8px; margin-bottom:6px;">
+      <div style="display:flex; gap:8px; align-items:center;">
         <input type="text" placeholder="Názov certifikátu" value="${nazov}" style="flex:1; margin-bottom:0;" class="pdf-nazov" />
-        <button type="button" class="btn btn-info open-pdf-btn" style="padding:4px 8px; font-size:11px; margin:0;"><i class="fas fa-eye"></i> Otvoriť</button>
-        <button type="button" class="btn btn-danger" style="padding:4px 8px; font-size:11px; margin:0;" onclick="this.closest('.pdf-row').remove()"><i class="fas fa-trash"></i></button>
-      </div>
-      <div style="display:flex; gap:8px;">
-        <input type="text" placeholder="Lokálna cesta (napr. C:\\Certifikaty\\subor.pdf)" value="${cestaVal}" style="flex:1; margin-bottom:0; font-size:12px;" class="pdf-cesta" />
         <input type="hidden" class="pdf-data" value="${dataVal}" />
+        <button type="button" class="btn btn-info open-pdf-btn" style="padding:6px 10px; font-size:12px; margin:0;"><i class="fas fa-eye"></i> Otvoriť</button>
+        <button type="button" class="btn btn-danger" style="padding:6px 10px; font-size:12px; margin:0;" onclick="this.closest('.pdf-row').remove()"><i class="fas fa-trash"></i></button>
       </div>
     `;
 
     const openBtn = div.querySelector('.open-pdf-btn');
     openBtn.onclick = () => {
       const currentData = div.querySelector('.pdf-data').value;
-      const currentCesta = div.querySelector('.pdf-cesta').value;
-      otvorPdfSubor(currentData || currentCesta);
+      otvorPdfSubor(currentData);
     };
 
     container.appendChild(div);
   }
 
-  async function vyberPdfZDisku() {
-    try {
-      const handles = await window.showOpenFilePicker({
-        multiple: true,
-        types: [{
-          description: 'PDF Dokumenty',
-          accept: { 'application/pdf': ['.pdf'] }
-        }]
-      });
+  // Spracovanie výberu PDF súborov priamo z disku
+  document.getElementById('pdfFileInput').addEventListener('change', function(e) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-      for (const handle of handles) {
-        const file = await handle.getFile();
-        const reader = new FileReader();
-        reader.onload = function(e) {
-          const base64Data = e.target.result;
-          const cleanName = file.name.replace(/\.[^/.]+$/, "");
-          pridajPdfRiadok(cleanName, base64Data, `C:\\Certifikaty\\${file.name}`);
-          showToast(`Úspešne načítaný súbor: ${file.name}`, 'success');
-        };
-        reader.readAsDataURL(file);
-      }
-    } catch (err) {
-      if (err.name !== 'AbortError') {
-        showToast("Výber súboru z disku bol zrušený.", "warning");
-      }
-    }
-  }
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const base64Data = evt.target.result;
+        const cleanName = file.name.replace(/\.[^/.]+$/, "");
+        pridajPdfRiadok(cleanName, base64Data);
+        showToast(`Úspešne pridaný certifikát: ${file.name}`, 'success');
+      };
+      reader.readAsDataURL(file);
+    });
+    this.value = ''; // reset inputu
+  });
 
   function zobrazMapu() {
     markerMap = {};
@@ -814,14 +796,13 @@
       const key = getStatusKey(l);
       let pdfHtml = '';
       if (l.pdf_zoznam && l.pdf_zoznam.length > 0) {
-        pdfHtml = '<div style="margin-top:6px; font-size:11px;"><b>PDF skeny / Cesty:</b><br>';
+        pdfHtml = '<div style="margin-top:6px; font-size:11px;"><b>PDF certifikáty:</b><br>';
         l.pdf_zoznam.forEach((p, idx) => {
           pdfHtml += `<div style="margin-top:2px;"><a href="#" id="map-pdf-${l.id}-${idx}" style="color:var(--danger-color); font-weight:500;"><i class="fas fa-file-pdf"></i> ${p.nazov || 'Certifikát'}</a></div>`;
         });
         pdfHtml += '</div>';
       }
 
-      // Vytvorenie značky na mape s možnosťou manuálneho posunu (draggable)
       const m = L.marker([l.lat, l.lng], { icon: markerIcons[key], draggable: true }).addTo(mapa)
         .bindPopup(`<strong>${l.name}</strong><br>
                     <b>Sektor:</b> ${l.sektor || 'N/A'}<br>
@@ -832,7 +813,6 @@
                     ${pdfHtml}
                     <button onclick="upravZaznamPodlaId('${l.id}')" style="margin-top:8px; background:var(--primary-color); color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;"><i class="fas fa-edit"></i> Upraviť</button>`);
       
-      // Aktualizácia súradníc po drag and drop posune značky na mape
       m.on('dragend', function(e) {
         const pos = e.target.getLatLng();
         l.lat = pos.lat;
@@ -848,7 +828,7 @@
             if (el) {
               el.onclick = (e) => {
                 e.preventDefault();
-                otvorPdfSubor(p.data || p.cesta);
+                otvorPdfSubor(p.data);
               };
             }
           });
@@ -874,8 +854,8 @@
       const badgeClass = statusKey === 'ok' ? 'badge-ok' : (statusKey === 'no' ? 'badge-no' : 'badge-partial');
       const badgeText = statusKey === 'ok' ? 'Má EC' : (statusKey === 'no' ? 'Bez EC' : 'Čiastočne');
 
-      const hasPdf = l.pdf_zoznam && l.pdf_zoznam.length > 0 && l.pdf_zoznam.some(p => p.data || p.cesta || p.nazov);
-      const pdfIconHtml = hasPdf ? `<i class="fas fa-file-pdf" style="color:var(--danger-color); margin-left:6px;" title="Obsahuje vložené PDF / Cestu"></i>` : '';
+      const hasPdf = l.pdf_zoznam && l.pdf_zoznam.length > 0 && l.pdf_zoznam.some(p => p.data);
+      const pdfIconHtml = hasPdf ? `<i class="fas fa-file-pdf" style="color:var(--danger-color); margin-left:6px;" title="Obsahuje vložené PDF"></i>` : '';
 
       const el = document.createElement('div');
       el.className = 'lokalita';
@@ -931,7 +911,7 @@
     
     if (l.pdf_zoznam && l.pdf_zoznam.length > 0) {
       l.pdf_zoznam.forEach(p => {
-        pridajPdfRiadok(p.nazov, p.data || '', p.cesta || p.url || '');
+        pridajPdfRiadok(p.nazov, p.data || '');
       });
     }
     document.getElementById('editModal').style.display = 'block';
@@ -946,16 +926,13 @@
     const pdfZoznam = [];
     document.querySelectorAll('#pdfContainer .pdf-row').forEach(row => {
       const nazov = row.querySelector('.pdf-nazov').value.trim();
-      const cestaVal = row.querySelector('.pdf-cesta').value.trim();
       const hiddenData = row.querySelector('.pdf-data');
       const dataVal = hiddenData ? hiddenData.value : '';
 
-      if (dataVal || cestaVal || nazov) {
+      if (dataVal || nazov) {
         pdfZoznam.push({
           nazov: nazov || 'Certifikát',
-          data: dataVal,
-          cesta: cestaVal,
-          url: cestaVal
+          data: dataVal
         });
       }
     });
@@ -1035,7 +1012,7 @@
           const cisloEcVal = row['Číslo EC'] || '';
           const poznamkaVal = row['Poznámka alebo špecifické informácie '] || '';
 
-          // NAČÍTANIE GPS ZO STĹPCOV N A O (GPS - Šírka (Latitude) / GPS - Dĺžka (Longitude))
+          // GPS zo stĺpcov N a O
           let rawLat = row['GPS - Šírka (Latitude)'] || row['GPS - Šírka'] || row['Latitude'] || row['Lat'] || findKey(['šírka', 'latitude']);
           let rawLng = row['GPS - Dĺžka (Longitude)'] || row['GPS - Dĺžka'] || row['Longitude'] || row['Lng'] || findKey(['dĺžka', 'longitude']);
 
@@ -1043,12 +1020,9 @@
           let parsedLng = parseFloat(String(rawLng).replace(',', '.'));
 
           let coords = null;
-
-          // 1. Ak existuje hodnota v stĺpcoch N a O, použije sa 100% presné GPS z Excelu
           if (!isNaN(parsedLat) && !isNaN(parsedLng) && parsedLat !== 0 && parsedLng !== 0) {
             coords = [parsedLat, parsedLng];
           } else {
-            // 2. Záložné geokódovanie online, ak GPS v Exceli chýba
             coords = await geocodeAddressOnline(adresaOrg);
             if (!coords) {
               coords = getFallbackCoords(adresaOrg);
