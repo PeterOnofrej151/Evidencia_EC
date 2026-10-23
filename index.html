@@ -488,7 +488,7 @@
     'partial': L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-orange.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34] })
   };
 
-  const townCoords = {
+ const townCoords = {
     'prešov': [49.0019, 21.2398],
     'poprad': [49.0558, 20.2915],
     'humenné': [48.9371, 21.9162],
@@ -503,19 +503,27 @@
     'levoča': [49.0268, 20.5902],
     'sabinov': [49.1039, 21.0934],
     'snina': [48.9866, 22.1528],
-    'gelnica': [48.8522, 20.9419]
+    'gelnica': [48.8522, 20.9419],
+    // Doplnené obce z vašich údajov:
+    'lemešany': [48.9134, 21.2856],
+    'vysoké tatry': [49.1385, 20.2223],
+    'batizovce': [49.0624, 20.2104],
+    'lipany': [49.1558, 20.9575],
+    'spisske podhradie': [49.0002, 20.7554],
+    'malý lipník': [49.3401, 20.7854]
   };
 
   function getCoordsFromAddress(addr) {
-    const lower = String(addr).toLowerCase();
+    const lower = String(addr).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     for (let town in townCoords) {
       if (lower.includes(town)) {
-        const latOffset = (Math.random() - 0.5) * 0.01;
-        const lngOffset = (Math.random() - 0.5) * 0.01;
+        const latOffset = (Math.random() - 0.5) * 0.005;
+        const lngOffset = (Math.random() - 0.5) * 0.005;
         return [townCoords[town][0] + latOffset, townCoords[town][1] + lngOffset];
       }
     }
-    return [48.9984 + (Math.random() - 0.5) * 0.02, 21.2393 + (Math.random() - 0.5) * 0.02];
+    // Predvolený stred pre Prešovský kraj, ak obec nie je nájdená
+    return [49.0 + (Math.random() - 0.5) * 0.05, 21.24 + (Math.random() - 0.5) * 0.05];
   }
 
   function showToast(msg, type = 'info') {
