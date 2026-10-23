@@ -970,7 +970,7 @@
 
           // Aktualizované mapovanie podľa nového vzoru Excel súboru
           const nazovOrg = findKey(['2. Názov organizácie', 'Názov organizácie']) || 'Neznáma organizácia';
-          const adresaOrg = findKey(['Adresa']) || '';
+          const adresaOrg = findKey(['Adresa', 'Adresa organizácie', 'Adresa organizacie', 'Mesto']) || '';
           const sektorVal = findKey(['3. Sektor', 'Sektor']) || 'Kultúra';
           const osobaVal = findKey(['4. Meno a priezvisko', 'kontaktná osoba', 'Osoba']) || '';
           const emailVal = findKey(['5. E-mailová adresa', 'E-mailová adresa']) || '';
