@@ -341,12 +341,12 @@
       </div>
     </div>
 
-    <!-- Excel Import / Export -->
+    <!-- Excel / CSV Import / Export -->
     <div style="margin-bottom: 15px; background: #f1f8e9; border: 1px solid #c5e1a5; padding: 15px; border-radius: 6px;">
-      <h4 style="margin-top:0; color:#2e7d32;"><i class="fas fa-file-excel" style="color:#217346;"></i> Excel Import / Export (.xlsx, .csv)</h4>
-      <p style="font-size: 13px; color: var(--light-text-color); margin-bottom: 10px;">Nahrajte priamo excelovskú tabuľku s dátami organizácií.</p>
+      <h4 style="margin-top:0; color:#2e7d32;"><i class="fas fa-file-excel" style="color:#217346;"></i> Excel / CSV Import & Export</h4>
+      <p style="font-size: 13px; color: var(--light-text-color); margin-bottom: 10px;">Nahrajte tabuľku vo formáte .xlsx, .xls alebo .csv.</p>
       <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-        <label class="btn btn-success" style="margin:0; cursor:pointer;"><i class="fas fa-file-import"></i> Import z Excelu <input type="file" id="fileInput" accept=".xlsx, .csv" style="display:none;" /></label>
+        <label class="btn btn-success" style="margin:0; cursor:pointer;"><i class="fas fa-file-import"></i> Import z Excelu / CSV <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" style="display:none;" /></label>
         <button id="exportBtn" class="btn btn-secondary" style="margin:0;"><i class="fas fa-file-export"></i> Export do Excelu</button>
       </div>
     </div>
@@ -907,7 +907,7 @@
     reader.readAsText(file);
   });
 
-  // Opravený a stabilizovaný import z Excelu (.xlsx / .csv) pomocou ArrayBuffer
+  // Spoľahlivý import z Excelu / CSV súboru s podporou záložných stĺpcov podľa poradia
   document.getElementById('fileInput').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -921,17 +921,20 @@
         const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
 
         if (!rows || rows.length === 0) {
-          showToast('Excel súbor neobsahuje žiadne dáta.', 'error');
+          showToast('Súbor neobsahuje žiadne dáta.', 'error');
           return;
         }
 
         let importovane = [];
         for (const r of rows) {
           const keys = Object.keys(r);
+          
+          // Názov organizácie (skúsi nájsť známy názov stĺpca, inak vezme druhý stĺpec)
           let orgName = getRowVal(r, ['2. Názov organizácie (OvZP PSK)', 'Názov organizácie', 'Organizácia', 'Názov', 'Name']);
           if (!orgName && keys.length > 1) orgName = r[keys[1]];
           if (!orgName) continue;
 
+          // Adresa (skúsi nájsť známy názov stĺpca, inak vezme štvrtý stĺpec)
           let adresaVal = getRowVal(r, ['Adresa', 'Adresa organizácie / Mesto', 'Adresa organizácie', 'Mesto', 'Polis', 'Sídlo']);
           if (!adresaVal && keys.length > 3) adresaVal = r[keys[3]];
 
