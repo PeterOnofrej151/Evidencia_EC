@@ -488,7 +488,7 @@
     'partial': L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-orange.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34] })
   };
 
- const townCoords = {
+  const townCoords = {
     'prešov': [49.0019, 21.2398],
     'poprad': [49.0558, 20.2915],
     'humenné': [48.9371, 21.9162],
@@ -504,7 +504,7 @@
     'sabinov': [49.1039, 21.0934],
     'snina': [48.9866, 22.1528],
     'gelnica': [48.8522, 20.9419],
-    // Doplnené obce z vašich údajov:
+    // Doplnené obce a lokality:
     'lemešany': [48.9134, 21.2856],
     'vysoké tatry': [49.1385, 20.2223],
     'batizovce': [49.0624, 20.2104],
@@ -522,7 +522,6 @@
         return [townCoords[town][0] + latOffset, townCoords[town][1] + lngOffset];
       }
     }
-    // Predvolený stred pre Prešovský kraj, ak obec nie je nájdená
     return [49.0 + (Math.random() - 0.5) * 0.05, 21.24 + (Math.random() - 0.5) * 0.05];
   }
 
@@ -675,7 +674,6 @@
         window.open(target, '_blank');
       }
     } else if (target.match(/^[a-zA-Z]:\\/) || target.startsWith('\\\\')) {
-      // Windows lokálna cesta (file:///...)
       const fileUrl = 'file:///' + target.replace(/\\/g, '/');
       window.open(fileUrl, '_blank');
     } else {
@@ -976,7 +974,6 @@
             return '';
           };
 
-          // Úplne presné mapovanie stĺpcov podľa najnovšej štruktúry
           const nazovOrg = row['2. Názov organizácie (OvZP PSK)  '] || findKey(['Názov organizácie']) || 'Neznáma organizácia';
           const adresaOrg = row['Adresa organizácie / Mesto'] || findKey(['Adresa']) || '';
           const sektorVal = row['3. Sektor '] || findKey(['Sektor']) || 'Kultúra';
