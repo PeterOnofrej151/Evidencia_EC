@@ -968,18 +968,25 @@
             return '';
           };
 
-          // Aktualizované mapovanie podľa nového vzoru Excel súboru
+          // Presne zohľadnené nové názvy stĺpcov vrátane 'Adresa organizácie / Mesto'
           const nazovOrg = findKey(['2. Názov organizácie', 'Názov organizácie']) || 'Neznáma organizácia';
-          const adresaOrg = findKey(['Adresa', 'Adresa organizácie', 'Adresa organizacie', 'Mesto']) || '';
+          const adresaOrg = findKey(['Adresa organizácie / Mesto', 'Adresa organizácie', 'Adresa']) || '';
           const sektorVal = findKey(['3. Sektor', 'Sektor']) || 'Kultúra';
           const osobaVal = findKey(['4. Meno a priezvisko', 'kontaktná osoba', 'Osoba']) || '';
-          const emailVal = findKey(['5. E-mailová adresa', 'E-mailová adresa']) || '';
-          const telefonVal = findKey(['6. Telefonický kontakt', 'Telefon', 'Telefón']) || '';
           
+          const allKeys = Object.keys(row);
+          let emailVal = '';
+          const emailKeys = allKeys.filter(k => k.toLowerCase().includes('e-mailová adresa') || k.toLowerCase().includes('email'));
+          if (emailKeys.length > 1) {
+            emailVal = row[emailKeys[1]] || row[emailKeys[0]] || '';
+          } else if (emailKeys.length === 1) {
+            emailVal = row[emailKeys[0]] || '';
+          }
+
+          const telefonVal = findKey(['6. Telefonický kontakt', 'Telefon', 'Telefón']) || '';
           const celkovoBudov = parseInt(findKey(['Celkový počet budov vo vašej správe', 'Celkový počet budov'])) || 1;
           const maEc = parseInt(findKey(['Počet budov, ktoré MÁJÚ platný energetický certifikát', 'MÁJÚ platný'])) || 0;
           const nemaEc = parseInt(findKey(['Počet budov, ktoré NEMÁJÚ platný energetický certifikát', 'NEMÁJÚ platný'])) || (celkovoBudov - maEc);
-          
           const cisloEcVal = findKey(['Číslo EC', 'Cislo EC']) || '';
           const poznamkaVal = findKey(['Poznámka alebo špecifické informácie', 'Poznámka']) || '';
 
